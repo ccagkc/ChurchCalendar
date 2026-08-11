@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教會恆常讀經計劃</title>
+    
+    <link rel="stylesheet" href="style.css?v=4">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'serif': ['"Noto Serif TC"', 'serif'],
+                        'sans': ['"Noto Sans TC"', 'sans-serif'],
+                    },
+                    colors: {
+                        nature: { 
+                            50: 'var(--theme-50)', 100: 'var(--theme-100)', 200: 'var(--theme-200)', 
+                            300: 'var(--theme-300)', 400: 'var(--theme-400)', 500: 'var(--theme-500)', 
+                            600: 'var(--theme-600)', 700: 'var(--theme-700)', 800: 'var(--theme-800)', 900: 'var(--theme-900)'
+                        }
+                    },
+                    boxShadow: { 'soft': '0 10px 40px -10px rgba(0,0,0,0.05)' }
+                }
+            }
+        }
+    </script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="text-gray-800 font-sans antialiased min-h-screen flex flex-col">
+    <div id="root" class="flex-grow flex flex-col"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const SITE_CONFIG = {
+            SPREADSHEET_ID: '1_FfNhrUwgI3l0vOpDqWfooAVQUja-Sl-YQOna3nJyQo', 
+            SHEET_NAME: 'ReadBible',
+            titleLine1: "剛強壯膽 · 踐信力行",
+            titleLine2: "葵涌堂 每日讀經計劃",
+            subtitle: "神的話語是我們腳前的燈、路上的光",
+            description: "同讀聖言行真道 · 聆聽聖靈活新生",
+            footerText: "© CCAGKC · BIBLE READING PORTAL",
+            storageKey: "kc-church-bible-progress-v3",
+            pseudoEmailDomain: "@kcc.bible.app",
+            adminEmailDomain: "@admin.kcc.app"
+        };
+        
+        const formatDate = (dateObj) => {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        const getTodayStr = () => formatDate(new Date());
+
+        const parseExternalLink = (url, type = 'audio') => {
+            if (!url || typeof url !== 'string' || url.trim() === '') return null;
+            if (!url.includes('google.com')) return { type: 'raw', url };
+            const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (!idMatch) return { type: 'raw', url };
+            const id = idMatch[1];
+            return { type: 'embed', url: type === 'audio' ? `https://drive.google.com/file/d/${id}/preview` : `https://docs.google.com/document/d/${id}/preview` };
+        };
+
+        const parseCSV = (str) => {
+            const arr = [];
+            let quote = false;
+            for (let row = 0, col = 0, c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                arr[row] = arr[row] || [];
+                arr[row][col] = arr[row][col] || "";
+                if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
+                if (cc == '"') { quote = !quote; continue; }
+                if (cc == ',' && !quote) { ++col; continue; }
+                if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
+                if (cc == '\n' && !quote) { ++row; col = 0; continue; }
+                if (cc == '\r' && !quote) { ++row; col = 0; continue; }
+                arr[row][col] += cc;
+            }
+            return arr;
+        };
+
+        const App = () => {
+            const [view, setView] = useState('calendar'); 
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [currentViewMonth, setCurrentViewMonth] = useState(new Date()); 
+            const [showAnswer, setShowAnswer] = useState(false);
+            
+            const [data, setData] = useState({}); 
+            const [validDates, setValidDates] = useState([]); 
+            const [completed, setCompleted] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            const [appSettings, setAppSettings] = useState({ groups: ['未入組/其他', '少年崇拜', '奇行組', 'IMA組', '加利利奮青', '彼得組', '隨意行組', '葡萄果組', 
+                                                                      'Spectrum組', '家靈一組', '7-11組', '清心組', 'ReConnect組', '基順ECO組', '蜜組', '喜樂組'] });
+            const [userProfile, setUserProfile] = useState(null);
+            
+            const [fb, setFb] = useState(null);
+            const [currentUser, setCurrentUser] = useState(null);
+            const [showAuthModal, setShowAuthModal] = useState(false);
+            const [showAdminLogin, setShowAdminLogin] = useState(false);
+            const [syncing, setSyncing] = useState(false);
+
+            let unsubscribeProgress = useRef(null);
+            let unsubscribeSettings = useRef(null);
+            let unsubscribeProfile = useRef(null);
+
+            useEffect(() => {
+                let unsubscribeAuth = null;
+
+                const initFirebase = async () => {
+                    try {
+                        const appModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+                        const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+                        const dbModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                
+                        const firebaseConfig = {
+                            apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
+                            authDomain: "ccagkc-biblereading-project.firebaseapp.com",
+                            databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+                            projectId: "ccagkc-biblereading-project",
+                            storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
+                            messagingSenderId: "962459311265",
+                            appId: "1:962459311265:web:cbad43a46491a046e5e4e0"
+                        };
+                        
+                        const app = appModule.initializeApp(firebaseConfig);
+                        const auth = authModule.getAuth(app);
+                        const db = dbModule.getFirestore(app);
+                        const appId = 'kcc-bible-app'; 
+                
+                        setFb({ auth, db, appId, authModule, dbModule });
+                
+                        const settingsRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'general');
+                        unsubscribeSettings.current = dbModule.onSnapshot(settingsRef, (snap) => {
+                            if (snap.exists()) {
+                                setAppSettings(snap.data());
+                            } else {
+                                setAppSettings({ groups: ['未入組/其他', '少年崇拜', '奇行組', 'IMA組', '加利利奮青', '彼得組', '隨意行組', '葡萄果組', 
+                                                      'Spectrum組', '家靈一組', '7-11組', '清心組', 'ReConnect組', '基順ECO組', '蜜組', '喜樂組'] });
+                            }
+                        }, (err) => console.warn("等待設定檔授權中:", err.message));
+                
+                        unsubscribeAuth = authModule.onAuthStateChanged(auth, (user) => {
+                            if (unsubscribeProfile.current) unsubscribeProfile.current();
+                            if (unsubscribeProgress.current) unsubscribeProgress.current();
+                
+                            if (user) {
+                                setCurrentUser(user);
+                                
+                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') {
+                                    setView('admin-dashboard');
+                                }
+                                
+                                const profileRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
+                                unsubscribeProfile.current = dbModule.onSnapshot(profileRef, (snap) => {
+                                    if (snap.exists()) {
+                                        setUserProfile(snap.data());
+                                    } else if (user.email.endsWith(SITE_CONFIG.adminEmailDomain)) {
+                                        setUserProfile({ username: user.email.split('@')[0], role: 'admin' });
+                                    }
+                                }, (err) => console.warn("等待 Profile 權限同步:", err.message));
+                
+                                const progressRef = dbModule.doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'progress');
+                                unsubscribeProgress.current = dbModule.onSnapshot(progressRef, (docSnap) => {
+                                    if (docSnap.exists()) setCompleted(docSnap.data().completedDates || []);
+                                }, (err) => console.warn("等待 Progress 權限同步:", err.message));
+                            } else {
+                                setCurrentUser(null);
+                                setUserProfile(null);
+                                setCompleted([]); 
+                                setView('calendar'); 
+                            }
+                        });
+                
+                    } catch (e) {
+                        console.error("Firebase 模組載入失敗", e);
+                    }
+                };
+                                
+                initFirebase();
+
+                return () => { 
+                    if (unsubscribeAuth) unsubscribeAuth();
+                    if (unsubscribeProgress.current) unsubscribeProgress.current(); 
+                    if (unsubscribeSettings.current) unsubscribeSettings.current();
+                    if (unsubscribeProfile.current) unsubscribeProfile.current();
+                };
+            }, []);
+
+            useEffect(() => {
+                const fetchSheetData = async () => {
+                    try {
+                        const csvUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
+                        const resp = await fetch(csvUrl);
+                        if (!resp.ok) throw new Error("無法連接到資料庫 (Google Sheet)");
+                        
+                        const text = await resp.text();
+                        const rows = parseCSV(text);
+                        if (rows.length < 2) throw new Error("資料庫格式不正確或沒有資料");
+
+                        const headers = rows[0].map(h => h.trim());
+                        const items = {};
+                        const datesArray = [];
+                        
+                        for(let i=1; i<rows.length; i++) {
+                            const row = rows[i];
+                            if (!row || row.length < 2) continue;
+                            const item = {};
+                            headers.forEach((h, idx) => item[h] = row[idx]);
+                            
+                            if(item['日期']) {
+                                const dateStr = item['日期'].replace(/\//g, '-');
+                                const parts = dateStr.split('-');
+                                if (parts.length === 3) {
+                                    const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                                    items[stdDate] = item;
+                                    if (!datesArray.includes(stdDate)) datesArray.push(stdDate);
+                                }
+                            }
+                        }
+                        datesArray.sort();
+                        setData(items);
+                        setValidDates(datesArray);
+
+                        if (datesArray.length > 0) {
+                            const todayStr = getTodayStr();
+                            let initialTarget = todayStr;
+                            if (!items[todayStr]) {
+                                const pastDates = datesArray.filter(d => d <= todayStr);
+                                initialTarget = pastDates.length > 0 ? pastDates[pastDates.length - 1] : datesArray[0];
+                            }
+                            const parts = initialTarget.split('-');
+                            setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                        }
+                    } catch (e) {
+                        setError(e.message);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                fetchSheetData();
+            }, []);
+            
+            const toggleFinish = async (dateStr) => {
+                const isDone = completed.includes(dateStr);
+                const next = isDone ? completed.filter(x => x !== dateStr) : [...completed, dateStr];
+                
+                setCompleted(next); 
+                
+                if (currentUser && fb) {
+                    setSyncing(true);
+                    try {
+                        const progressRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'users', currentUser.uid, 'data', 'progress');
+                        await fb.dbModule.setDoc(progressRef, { completedDates: next }, { merge: true });
+                        
+                        const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
+                        await fb.dbModule.setDoc(profileRef, { 
+                            completedCount: next.length,
+                            lastActive: new Date().toISOString()
+                        }, { merge: true });
+
+                    } catch (e) {
+                        console.error("寫入雲端失敗 (請確認權限設定)", e);
+                    } finally {
+                        setSyncing(false);
+                    }
+                } else if (fb && !currentUser) {
+                    setShowAuthModal(true);
+                }
+            };
+
+            const AuthModal = () => {
+                const [step, setStep] = useState(1);
+                const [username, setUsername] = useState('');
+                const [selectedGroup, setSelectedGroup] = useState('');
+                const [authError, setAuthError] = useState('');
+                const [processing, setProcessing] = useState(false);
+
+                if (!showAuthModal) return null;
+
+                const handleAction = async (e) => {
+                    e.preventDefault();
+                    if (username.trim().length < 2) return setAuthError('代號請至少輸入兩個字');
+                    setProcessing(true);
+                    setAuthError('');
+                    
+                    const FIXED_PASS = "KccBible@2026_AutoPass";
+                    const fakeEmail = `${username.trim().toLowerCase()}${SITE_CONFIG.pseudoEmailDomain}`;
+
+                    try {
+                        if (step === 1) {
+                            try {
+                                await fb.authModule.signInWithEmailAndPassword(fb.auth, fakeEmail, FIXED_PASS);
+                                setShowAuthModal(false); 
+                            } catch (err) {
+                                setStep(2);
+                            }
+                        } else if (step === 2) {
+                            if (!selectedGroup) {
+                                setAuthError('請選擇你所屬的小組');
+                                setProcessing(false);
+                                return;
+                            }
+                            const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, fakeEmail, FIXED_PASS);
+                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
+                            await fb.dbModule.setDoc(profileRef, {
+                                username: username.trim(),
+                                group: selectedGroup,
+                                role: 'user',
+                                completedCount: 0,
+                                createdAt: new Date().toISOString()
+                            });
+                            setShowAuthModal(false);
+                        }
+                    } catch (error) {
+                        setAuthError("系統連線異常，請稍後再試。");
+                    } finally {
+                        setProcessing(false);
+                    }
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-nature-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-fade-in">
+                            <div className="bg-nature-600 p-6 text-white relative">
+                                <button onClick={() => setShowAuthModal(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-700 transition">
+                                    <i className="fa-solid fa-xmark"></i>
+                                </button>
+                                <h2 className="text-2xl font-bold font-serif flex items-center">
+                                    <i className="fa-solid fa-cloud-arrow-up mr-3"></i> {step === 1 ? '開啟進度同步' : '首次登記資料'}
+                                </h2>
+                            </div>
+                            
+                            <div className="p-6 md:p-8">
+                                {authError && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-4 border border-red-100"><i className="fa-solid fa-triangle-exclamation mr-1"></i> {authError}</div>}
+
+                                <form onSubmit={handleAction} className="space-y-4">
+                                    {step === 1 ? (
+                                        <div className="animate-fade-in">
+                                            <label className="block text-sm font-bold text-nature-800 mb-2">輸入你的個人代號 或 英文簡稱</label>
+                                            <input type="text" value={username} onChange={e=>setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="例如：peter-chan" className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:border-nature-500 bg-gray-50 text-lg" required />
+                                            <p className="text-xs text-gray-500 mt-2"><i className="fa-solid fa-circle-info"></i> 系統自動辨識，首次登記將填寫所屬教會小組。</p>
+                                        </div>
+                                    ) : (
+                                        <div className="animate-fade-in space-y-4">
+                                            <div className="bg-nature-50 p-3 rounded-xl border border-nature-100 flex items-center">
+                                                <i className="fa-solid fa-user-tag text-nature-400 mr-3 text-lg"></i>
+                                                <div>
+                                                    <div className="text-xs text-gray-500">正在註冊個人代號</div>
+                                                    <div className="font-bold text-nature-800">{username}</div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-nature-800 mb-2">請選擇你所屬的小組 <span className="text-red-500">*</span></label>
+                                                <select value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:border-nature-500 bg-gray-50 text-lg" required>
+                                                    <option value="" disabled>-- 請選擇小組 --</option>
+                                                    {appSettings.groups.map(g => <option key={g} value={g}>{g}</option>)}
+                                                </select>
+                                                <p className="text-xs text-gray-500 mt-2">此資料將協助教會統計讀經參與情況。</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button type="submit" disabled={processing} className="w-full bg-nature-600 hover:bg-nature-700 text-white font-bold py-4 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 mt-4 text-lg">
+                                        {processing ? <i className="fa-solid fa-spinner fa-spin"></i> : (step === 1 ? '確認代號' : '完成註冊')}
+                                    </button>
+                                    
+                                    {step === 2 && (
+                                        <button type="button" onClick={() => setStep(1)} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 mt-2">返回修改代號</button>
+                                    )}
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const AdminLoginModal = () => {
+                const [password, setPassword] = useState('');
+                const [isRegister, setIsRegister] = useState(false);
+                const [errorMsg, setErrorMsg] = useState('');
+                const [loading, setLoading] = useState(false);
+
+                if (!showAdminLogin) return null;
+
+                const handleAdminAuth = async (e) => {
+                    e.preventDefault();
+                    setLoading(true);
+                    setErrorMsg('');
+                    const adminEmail = `admin${SITE_CONFIG.adminEmailDomain}`;
+                    
+                    try {
+                        if (isRegister) {
+                            const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, adminEmail, password);
+                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
+                            await fb.dbModule.setDoc(profileRef, { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
+                        } else {
+                            const cred = await fb.authModule.signInWithEmailAndPassword(fb.auth, adminEmail, password);
+                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
+                            const snap = await fb.dbModule.getDoc(profileRef);
+                            if (!snap.exists()) {
+                                await fb.dbModule.setDoc(profileRef, { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
+                            }
+                        }
+                        setShowAdminLogin(false);
+                        setView('admin-dashboard'); 
+                    } catch (err) {
+                        if (err.code === 'auth/email-already-in-use') {
+                            setErrorMsg("管理員已存在，請取消勾選「首次使用」直接登入");
+                        } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+                            setErrorMsg(isRegister ? "設定失敗 (密碼需至少6個字元)" : "登入失敗 (若是剛重置系統，請勾選下方選項重新建立帳號)");
+                        } else {
+                            setErrorMsg(err.message);
+                        }
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[1.5rem] w-full max-w-sm shadow-2xl overflow-hidden animate-fade-in">
+                            <div className="bg-gray-800 p-5 text-white flex justify-between items-center">
+                                <h3 className="font-bold flex items-center"><i className="fa-solid fa-shield-halved mr-2 text-nature-300"></i> 管理員安全登入</h3>
+                                <button onClick={() => setShowAdminLogin(false)} className="text-gray-400 hover:text-white transition"><i className="fa-solid fa-xmark text-lg"></i></button>
+                            </div>
+                            <form onSubmit={handleAdminAuth} className="p-6 md:p-8 space-y-5">
+                                {errorMsg && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl border border-red-100"><i className="fa-solid fa-triangle-exclamation mr-1"></i> {errorMsg}</div>}
+                                
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">請輸入管理員密碼</label>
+                                    <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-nature-500 focus:ring-4 focus:ring-nature-100 transition text-xl tracking-widest text-center font-bold" required autoFocus />
+                                </div>
+                                
+                                <div className="flex items-center justify-center mt-2">
+                                    <input type="checkbox" id="regAdmin" checked={isRegister} onChange={(e) => setIsRegister(e.target.checked)} className="mr-2 w-4 h-4 text-nature-600 rounded border-gray-300" />
+                                    <label htmlFor="regAdmin" className="text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition">首次使用 (建立管理員密碼)</label>
+                                </div>
+                                
+                                <button type="submit" disabled={loading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
+                                    {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            };
+            
+            const AdminDashboard = () => {
+                const [activeTab, setActiveTab] = useState('stats'); 
+                const [newGroup, setNewGroup] = useState('');
+                const [usersList, setUsersList] = useState([]);
+                const [loadingStats, setLoadingStats] = useState(false);
+
+                useEffect(() => {
+                    if (activeTab === 'stats' && fb && userProfile?.role === 'admin') {
+                        setLoadingStats(true);
+                        const fetchUsers = async () => {
+                            try {
+                                const usersCol = fb.dbModule.collection(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles');
+                                const snapshot = await fb.dbModule.getDocs(usersCol);
+                                const list = [];
+                                snapshot.forEach(doc => {
+                                    const data = doc.data();
+                                    if (data.role !== 'admin') list.push(data); 
+                                });
+                                setUsersList(list);
+                            } catch (e) {
+                                console.error("獲取統計資料失敗:", e.message);
+                            } finally {
+                                setLoadingStats(false);
+                            }
+                        };
+                        fetchUsers();
+                    }
+                }, [activeTab, fb, userProfile]);
+
+                const handleAddGroup = async () => {
+                    if (!newGroup.trim() || appSettings.groups.includes(newGroup.trim())) return;
+                    const updated = [...appSettings.groups, newGroup.trim()];
+                    const settingsRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'settings', 'general');
+                    await fb.dbModule.setDoc(settingsRef, { groups: updated }, { merge: true });
+                    setNewGroup('');
+                };
+
+                const handleRemoveGroup = async (groupName) => {
+                    if (!confirm(`確定要刪除小組「${groupName}」嗎？`)) return;
+                    const updated = appSettings.groups.filter(g => g !== groupName);
+                    const settingsRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'settings', 'general');
+                    await fb.dbModule.setDoc(settingsRef, { groups: updated }, { merge: true });
+                };
+
+                const handleExportCSV = () => {
+                    if (usersList.length === 0) {
+                        alert("目前沒有數據可供匯出。");
+                        return;
+                    }
+
+                    const headers = ['小組/牧區', '姓名/代號', '已讀天數', '最後活動日期', '註冊日期'];
+                    
+                    const rows = usersList.map(user => [
+                        user.group || '未分類',
+                        user.username || '無名',
+                        user.completedCount || 0,
+                        user.lastActive ? user.lastActive.substring(0, 10) : '無紀錄',
+                        user.createdAt ? user.createdAt.substring(0, 10) : '無紀錄'
+                    ]);
+
+                    const csvContent = [
+                        headers.join(','),
+                        ...rows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+                    ].join('\n');
+
+                    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+                    const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+                    
+                    const link = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    const today = new Date();
+                    const dateStr = `${today.getFullYear()}${(today.getMonth()+1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
+                    
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `葵涌堂_讀經進度統計_${dateStr}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
+
+                const groupedStats = usersList.reduce((acc, user) => {
+                    const group = user.group || '未分類';
+                    if (!acc[group]) acc[group] = [];
+                    acc[group].push(user);
+                    return acc;
+                }, {});
+
+                return (
+                    <div className="max-w-5xl mx-auto w-full animate-fade-in bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden min-h-[60vh]">
+                        <div className="bg-gray-900 text-white p-6 md:p-8 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-2xl font-bold font-serif mb-1"><i className="fa-solid fa-server mr-2 text-nature-400"></i> 教會讀經後台系統</h2>
+                                <p className="text-gray-400 text-sm">管理員：{userProfile?.username}</p>
+                            </div>
+                            <button onClick={() => setView('calendar')} className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition font-bold border border-gray-700">
+                                返回前台
+                            </button>
+                        </div>
+
+                        <div className="flex border-b border-gray-200">
+                            <button onClick={() => setActiveTab('stats')} className={`flex-1 py-4 font-bold transition ${activeTab === 'stats' ? 'bg-nature-50 text-nature-700 border-b-2 border-nature-600' : 'text-gray-500 hover:bg-gray-50'}`}><i className="fa-solid fa-chart-pie mr-2"></i> 參與統計</button>
+                            <button onClick={() => setActiveTab('settings')} className={`flex-1 py-4 font-bold transition ${activeTab === 'settings' ? 'bg-nature-50 text-nature-700 border-b-2 border-nature-600' : 'text-gray-500 hover:bg-gray-50'}`}><i className="fa-solid fa-users-gear mr-2"></i> 小組設定</button>
+                        </div>
+
+                        <div className="p-6 md:p-8 bg-gray-50 min-h-[400px]">
+                            {activeTab === 'settings' && (
+                                <div className="max-w-2xl mx-auto space-y-8">
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-lg mb-4 text-gray-800 border-l-4 border-nature-500 pl-3">新增小組 / 身份類別</h3>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={newGroup} onChange={e=>setNewGroup(e.target.value)} placeholder="例如：約書亞團契" className="flex-1 p-3 border border-gray-200 rounded-xl focus:outline-none focus:border-nature-500" />
+                                            <button onClick={handleAddGroup} className="bg-nature-600 text-white px-6 font-bold rounded-xl hover:bg-nature-700 transition">新增</button>
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-2">新增後，新註冊的使用者將可以在選單中選擇此小組。</p>
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-lg mb-4 text-gray-800 border-l-4 border-nature-500 pl-3">現有小組列表</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {appSettings.groups.map(g => (
+                                                <div key={g} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                                    <span className="font-medium text-gray-700">{g}</span>
+                                                    <button onClick={() => handleRemoveGroup(g)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition"><i className="fa-solid fa-trash-can"></i></button>
+                                                </div>
+                                            ))}
+                                            {appSettings.groups.length === 0 && <div className="text-gray-400 text-sm py-4">目前沒有設定任何小組</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'stats' && (
+                                <div className="animate-fade-in">
+                                    {loadingStats ? (
+                                        <div className="flex justify-center items-center py-20 text-gray-400"><i className="fa-solid fa-spinner fa-spin text-3xl mr-3"></i> 載入數據中...</div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 md:px-6 rounded-2xl shadow-sm border border-nature-100 mb-6 gap-4">
+                                                <div>
+                                                    <h3 className="font-bold text-nature-800 text-lg">全教會參與數據</h3>
+                                                    <p className="text-xs text-gray-400 mt-1">目前共有 {usersList.length} 位參與者</p>
+                                                </div>
+                                                <button 
+                                                    onClick={handleExportCSV}
+                                                    disabled={usersList.length === 0}
+                                                    className="w-full md:w-auto bg-nature-600 hover:bg-nature-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center"
+                                                >
+                                                    <i className="fa-solid fa-file-csv mr-2 text-lg"></i> 匯出 Excel / CSV 報表
+                                                </button>
+                                            </div>
+
+                                            {Object.keys(groupedStats).length === 0 ? (
+                                                <div className="text-center py-10 text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">目前還沒有任何使用者註冊記錄。</div>
+                                            ) : (
+                                                Object.keys(groupedStats).sort().map(groupName => (
+                                                    <div key={groupName} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                                        <div className="bg-nature-100/50 px-6 py-3 border-b border-gray-100 flex justify-between items-center">
+                                                            <h3 className="font-bold text-nature-800"><i className="fa-solid fa-users text-nature-500 mr-2"></i> {groupName}</h3>
+                                                            <span className="bg-nature-600 text-white text-xs px-2 py-1 rounded-full font-bold">{groupedStats[groupName].length} 人</span>
+                                                        </div>
+                                                        <div className="divide-y divide-gray-100">
+                                                            {groupedStats[groupName].sort((a,b) => (b.completedCount||0) - (a.completedCount||0)).map((user, idx) => (
+                                                                <div key={idx} className="flex justify-between items-center p-4 hover:bg-gray-50 transition">
+                                                                    <div className="font-medium text-gray-700">{user.username}</div>
+                                                                    <div className="text-sm">
+                                                                        <span className="text-gray-400 mr-4 text-xs hidden md:inline">最後活動: {user.lastActive ? user.lastActive.substring(0,10) : '無紀錄'}</span>
+                                                                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg font-bold">已讀 {user.completedCount || 0} 天</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            if (loading) return (
+                <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50">
+                    <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i>
+                    <p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步最新讀經資料...</p>
+                </div>
+            );
+
+            const renderCalendarView = () => {
+                const year = currentViewMonth.getFullYear();
+                const month = currentViewMonth.getMonth();
+                const firstDayOfMonth = new Date(year, month, 1);
+                const lastDayOfMonth = new Date(year, month + 1, 0);
+                const grid = [];
+                let currentWeek = [];
+                
+                for (let i = 0; i < firstDayOfMonth.getDay(); i++) currentWeek.push(null);
+                for (let d = 1; d <= lastDayOfMonth.getDate(); d++) {
+                    const currentDate = new Date(year, month, d);
+                    currentWeek.push(currentDate);
+                    if (currentDate.getDay() === 6 || d === lastDayOfMonth.getDate()) {
+                        while (currentWeek.length < 7) currentWeek.push(null);
+                        grid.push(currentWeek);
+                        currentWeek = [];
+                    }
+                }
+                
+                const todayStr = getTodayStr();
+                const changeMonth = (offset) => {
+                    setCurrentViewMonth(prev => {
+                        const next = new Date(prev);
+                        next.setMonth(prev.getMonth() + offset);
+                        return next;
+                    });
+                };
+                
+                const handleGoToday = () => {
+                    if (validDates.length > 0) {
+                        let targetDate = validDates.includes(todayStr) ? todayStr : null;
+                        if (!targetDate) {
+                            const pastDates = validDates.filter(d => d <= todayStr);
+                            targetDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : validDates[0];
+                        }
+                        const parts = targetDate.split('-');
+                        setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                        setSelectedDate(targetDate);
+                        setView('reader');
+                        setShowAnswer(false);
+                        window.scrollTo(0,0);
+                    }
+                };
+
+                return (
+                    <div className="max-w-4xl mx-auto w-full animate-fade-in">
+                        
+                        <div className="flex justify-center mb-8">
+                            <button 
+                                onClick={handleGoToday}
+                                className="px-8 py-4 bg-white border-2 border-nature-600 text-nature-700 hover:bg-nature-600 hover:text-white rounded-full font-bold shadow-lg flex items-center transition-all group active:scale-95"
+                            >
+                                <i className="fa-solid fa-book-open-reader mr-3 text-nature-500 group-hover:text-white transition-colors"></i> 
+                                <span className="text-lg">進入今日閱讀</span>
+                            </button>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-white p-4 md:px-8 md:py-5 rounded-[2rem] shadow-sm border border-nature-100 mb-8">
+                            <button onClick={() => changeMonth(-1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-nature-50 hover:bg-nature-100">
+                                <i className="fa-solid fa-chevron-left mr-2"></i> <span className="hidden md:inline">上一月</span>
+                            </button>
+                            <div className="text-xl md:text-3xl font-bold text-nature-800 tracking-widest">
+                                {year}年 {month + 1}月
+                            </div>
+                            <button onClick={() => changeMonth(1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-nature-50 hover:bg-nature-100">
+                                <span className="hidden md:inline">下一月</span> <i className="fa-solid fa-chevron-right ml-2"></i>
+                            </button>
+                        </div>
+
+                        <section className="bg-white rounded-[2rem] shadow-lg border border-nature-100 overflow-hidden">
+                            <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block">
+                                {year}年 {month + 1}月
+                            </div>
+                            <div className="p-4 md:p-6 grid grid-cols-7 gap-2 md:gap-3">
+                                {['日','一','二','三','四','五','六'].map(d => <div key={d} className="text-center text-gray-400 text-xs md:text-sm font-bold py-1 uppercase">{d}</div>)}
+                                
+                                {grid.map((week, wi) => week.map((dateObj, di) => {
+                                    if(!dateObj) return <div key={`empty-${wi}-${di}`}></div>;
+                                    
+                                    const dateStr = formatDate(dateObj);
+                                    const isPlan = validDates.includes(dateStr);
+                                    const isDone = completed.includes(dateStr);
+                                    const hasData = !!data[dateStr];
+                                    
+                                    const hasAudio = hasData && data[dateStr]['語音連結'] && data[dateStr]['語音連結'].trim() !== '';
+                                    const hasQuestion = hasData && data[dateStr]['問題'] && data[dateStr]['問題'].trim() !== '';
+                                    
+                                    const dayData = isPlan ? data[dateStr] : null;
+                                    
+                                    let btnClass = 'relative h-14 md:h-20 rounded-2xl flex flex-col items-center justify-center transition-all ';
+                                    
+                                    if (!isPlan) {
+                                        btnClass += 'bg-gray-50 text-gray-200 cursor-not-allowed';
+                                    } else if (isDone) {
+                                        btnClass += 'bg-nature-100 text-nature-700 border-2 border-nature-500 font-bold shadow-sm';
+                                    } else if (hasData) {
+                                        if (hasAudio) {
+                                            btnClass += 'bg-purple-50/30 border border-purple-200 hover:border-purple-400 hover:shadow-md text-purple-700 font-bold';
+                                        } else if (hasQuestion) {
+                                            btnClass += 'bg-nature-50 border border-nature-300 hover:border-nature-500 hover:shadow-md text-nature-700 font-bold';
+                                        } else {
+                                            btnClass += 'bg-gray-100 border border-gray-200 hover:border-gray-400 hover:shadow-md text-gray-500 font-bold';
+                                        }
+                                    } else {
+                                        btnClass += 'bg-white border border-gray-100 hover:border-nature-300 text-gray-400 opacity-60';
+                                    }
+
+                                    return (
+                                        <button 
+                                            key={dateStr}
+                                            disabled={!isPlan}
+                                            onClick={() => { 
+                                                setSelectedDate(dateStr); 
+                                                setView('reader'); 
+                                                setShowAnswer(false); 
+                                                window.scrollTo(0,0);
+                                            }}
+                                            className={btnClass}
+                                        >
+                                            <span className="text-lg md:text-xl">{dateObj.getDate()}</span>
+                                            {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-1"></i>}
+                                            
+                                            {/* 💡 專家優化：僅顯示「類別」標籤，移除「經卷」以保持版面極簡 */}
+                                            {isPlan && dayData && (
+                                                <div className="mt-auto pt-1 pb-1 relative z-10 w-full flex flex-col items-center">
+                                                    {String(dayData['類別'] || '').trim() !== '' && (
+                                                        <div className={`px-2 py-1 rounded text-[9px] md:text-xs font-sans font-bold tracking-wider shadow-sm transition-colors ${isDone ? 'bg-emerald-200/70 text-emerald-800' : 'bg-nature-200/60 text-nature-800'}`}>
+                                                            {dayData['類別']}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </button>
+                                    );
+                                }))}
+                            </div>
+                        </section>
+                    </div>
+                );
+            };
+
+            const renderReaderView = () => {
+                const currentData = data[selectedDate] || {};
+                if (!currentData || Object.keys(currentData).length === 0) return null;
+
+                const hasAudio = !!currentData['語音連結'];
+                const hasScripture = !!currentData['經文'];
+                const hasExplanation = !!currentData['釋義'];
+                const hasQuestion = !!currentData['問題'];
+                const hasAnswer = !!currentData['答案'];
+
+                const audioInfo = hasAudio ? parseExternalLink(currentData['語音連結'], 'audio') : null;
+                const scriptInfo = hasScripture ? parseExternalLink(currentData['經文'], 'doc') : null;
+                const questionInfo = hasQuestion ? parseExternalLink(currentData['問題'], 'doc') : null;
+                const answerInfo = hasAnswer ? parseExternalLink(currentData['答案'], 'doc') : null;
+
+                const isCompleted = completed.includes(selectedDate);
+                const currentIndex = validDates.indexOf(selectedDate);
+
+                return (
+                    <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <button onClick={()=>{ setView('calendar'); setShowAnswer(false); }} className="bg-white px-4 py-2 rounded-full border border-nature-200 text-nature-700 font-medium hover:bg-nature-50 shadow-sm flex items-center text-sm transition">
+                                <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
+                            </button>
+                            <div className="text-gray-500 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-nature-50">{selectedDate}</div>
+                        </div>
+
+                        <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
+                            <div className="bg-nature-700 text-white p-8 md:p-10">
+                                <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
+                                    <i className="fa-solid fa-book-open-reader"></i>
+                                    <span>今日內容</span>
+                                </div>
+                                <h2 className="text-3xl md:text-4xl font-serif font-bold">
+                                    {currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}
+                                </h2>
+                            </div>
+                            
+                            <div className="p-6 md:p-10 space-y-12">
+                                {audioInfo && (
+                                    <section className="bg-nature-50/50 p-6 rounded-3xl border border-nature-100 shadow-inner">
+                                        <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm">
+                                            <i className="fa-solid fa-circle-play mr-2 text-nature-600"></i> 語音朗讀
+                                        </h4>
+                                        {audioInfo.type === 'embed' ? (
+                                            <iframe src={audioInfo.url} className="w-full h-16 border-0 rounded-xl bg-transparent"></iframe>
+                                        ) : (
+                                            <audio controls className="w-full h-10"><source src={audioInfo.url}/></audio>
+                                        )}
+                                    </section>
+                                )}
+
+                                {hasScripture && (
+                                    <section>
+                                        <div className="flex justify-between items-end mb-6">
+                                            <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">聖經經文</h4>
+                                            {currentData['經文'].includes('http') && (
+                                                <a href={currentData['經文']} target="_blank" className="text-xs text-nature-600 hover:underline font-bold">
+                                                    <i className="fa-solid fa-up-right-from-square mr-1"></i> 全螢幕閱讀
+                                                </a>
+                                            )}
+                                        </div>
+                                        <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[100px]">
+                                            {scriptInfo && scriptInfo.type === 'embed' ? (
+                                                <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                    <iframe src={scriptInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                </div>
+                                            ) : (
+                                                <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
+                                                    {currentData['經文']}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {hasExplanation && (
+                                    <section>
+                                        <h4 className="text-nature-700 font-bold mb-4 border-l-4 border-nature-500 pl-3">經文釋義</h4>
+                                        <div className="bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-50 text-gray-600 leading-loose text-base md:text-lg italic font-serif">
+                                            {currentData['釋義']}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {hasQuestion && (
+                                    <section className="pt-6 border-t border-dashed border-nature-200">
+                                        <div className="flex justify-between items-end mb-6">
+                                            <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">將神的話讀入心</h4>
+                                        </div>
+                                        <div className="rounded-2xl overflow-hidden bg-white border-2 border-nature-100 min-h-[100px]">
+                                            {questionInfo && questionInfo.type === 'embed' ? (
+                                                <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                    <iframe src={questionInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                </div>
+                                            ) : (
+                                                <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
+                                                    {currentData['問題']}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {hasAnswer && (
+                                            <div className="mt-6">
+                                                {!showAnswer ? (
+                                                    <button 
+                                                        onClick={() => setShowAnswer(true)}
+                                                        className="px-6 py-3 bg-nature-100 hover:bg-nature-200 text-nature-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center"
+                                                    >
+                                                        <i className="fa-solid fa-lightbulb mr-2"></i> 顯示參考答案
+                                                    </button>
+                                                ) : (
+                                                    <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in">
+                                                        <h4 className="text-nature-700 font-bold mb-4 flex items-center border-b border-nature-200 pb-3">
+                                                            <i className="fa-solid fa-key mr-2"></i> 參考答案
+                                                        </h4>
+                                                        {answerInfo && answerInfo.type === 'embed' ? (
+                                                            <div className="relative pt-[130%] md:pt-[100%] w-full mt-4">
+                                                                <iframe src={answerInfo.url} className="absolute inset-0 w-full h-full border-0 rounded-xl"></iframe>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-lg md:text-xl leading-loose font-serif text-gray-700 whitespace-pre-wrap">
+                                                                {currentData['答案']}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </section>
+                                )}
+                            </div>
+                        </article>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                           <button 
+                                onClick={()=>toggleFinish(selectedDate)}
+                                className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${
+                                    isCompleted ? 'bg-white text-nature-600 border-2 border-nature-600' : 'bg-nature-600 text-white hover:bg-nature-700'
+                                }`}
+                            >
+                                {syncing ? <i className="fa-solid fa-spinner fa-spin mr-3 text-xl"></i> : <i className={`fa-solid mr-3 text-xl ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i>}
+                                {isCompleted ? '我已完成今日進度' : '標記今日完成'}
+                            </button>
+                            <div className="flex gap-2">
+                                <button 
+                                     disabled={currentIndex === 0} 
+                                     onClick={() => { setSelectedDate(validDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                     className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
+                                >
+                                    <i className="fa-solid fa-arrow-left mr-2"></i> <span className="hidden md:inline">前一天</span>
+                                </button>
+                                <button 
+                                    disabled={currentIndex === validDates.length - 1} 
+                                    onClick={() => { setSelectedDate(validDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                    className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
+                                >
+                                    <span className="hidden md:inline">後一天</span> <i className="fa-solid fa-arrow-right ml-2"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-center mb-16">
+                            <button 
+                                onClick={()=>{ setView('calendar'); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                className="w-full md:w-auto px-10 py-4 bg-white border-2 border-nature-200 text-nature-700 rounded-2xl shadow-sm hover:bg-nature-50 hover:border-nature-400 font-bold flex items-center justify-center transition-all group active:scale-95"
+                            >
+                                <i className="fa-solid fa-house mr-3 text-nature-500 group-hover:text-nature-600 transition-colors"></i> 
+                                <span className="text-lg">返回月曆主頁</span>
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            if (error) return (
+                <div className="flex-grow flex flex-col items-center justify-center text-red-600 bg-red-50 p-6 text-center animate-fade-in shadow-inner rounded-3xl m-4 border-2 border-red-200">
+                    <i className="fa-solid fa-triangle-exclamation text-6xl mb-6 drop-shadow-md"></i>
+                    <p className="font-bold text-2xl mb-3 text-red-800">無法載入系統</p>
+                    <p className="text-red-600 font-medium max-w-md">{error}</p>
+                </div>
+            );
+
+            return (
+                <>
+                    <AuthModal />
+                    <AdminLoginModal />
+                    <header className="bg-white/70 backdrop-blur-md border-b border-white/50 shadow-sm sticky top-0 z-40">
+                        <div className="max-w-5xl mx-auto px-4 py-4 md:py-5 flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={()=>setView('calendar')}><i className="fa-solid fa-cross text-xl"></i></div>
+                                <div><h1 className="text-xl md:text-2xl font-bold text-nature-900 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
+                            </div>
+                            
+                            {fb && (
+                                <div className="flex items-center gap-2">
+                                    {currentUser ? (
+                                        <div className="group relative">
+                                            <button className={`flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm ${userProfile?.role === 'admin' ? 'bg-gray-800 text-white border-gray-900' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                                <i className={`fa-solid ${userProfile?.role === 'admin' ? 'fa-shield-halved' : 'fa-cloud-check'}`}></i> 
+                                                <span>{currentUser.email.split('@')[0]}</span>
+                                            </button>
+                                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                                                {userProfile?.role === 'admin' && view !== 'admin-dashboard' && (
+                                                    <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-nature-700 hover:bg-nature-50 font-bold border-b"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>
+                                                )}
+                                                <button onClick={()=>{ 
+                                                    setCompleted([]); 
+                                                    setCurrentUser(null);
+                                                    setUserProfile(null);
+                                                    setView('calendar'); 
+                                                    fb.authModule.signOut(fb.auth); 
+                                                }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-b-xl font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-nature-200 hover:border-nature-400 text-nature-600 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95">
+                                            <i className="fa-solid fa-cloud-arrow-up"></i> <span className="hidden md:inline">登入 / 註冊</span>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </header>
+
+                    {view === 'calendar' && (
+                        <div className="bg-gradient-to-br from-nature-800 to-nature-600 text-white py-10 px-4 shadow-xl text-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                                <i className="fa-solid fa-seedling text-[15rem] -ml-10 -mt-10"></i>
+                            </div>
+                            <h1 className="text-3xl md:text-5xl font-bold mb-2 relative z-10 tracking-tight">{SITE_CONFIG.titleLine1}</h1>
+                            <h1 className="text-3xl md:text-5xl font-bold mb-2 relative z-10 tracking-tight">{SITE_CONFIG.titleLine2}</h1>
+                            <p className="text-xl md:text-2xl font-serif italic text-nature-200 mb-4 relative z-10 mt-4">{SITE_CONFIG.subtitle}</p>
+                            <p className="text-nature-100 opacity-90 relative z-10 font-medium">{SITE_CONFIG.description}</p>
+                        </div>
+                    )}
+
+                    <main className="flex-grow py-8 px-4 w-full bg-nature-50/30">
+                        {view === 'admin-dashboard' && userProfile?.role === 'admin' ? (
+                            <AdminDashboard />
+                        ) : view === 'reader' && selectedDate ? (
+                            renderReaderView()
+                        ) : (
+                            renderCalendarView()
+                        )}
+                    </main>
+
+                    <footer className="py-10 bg-white border-t border-nature-100 text-center text-gray-400 text-[10px] tracking-widest uppercase mt-auto">
+                        <p className="mb-2"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
+                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition">
+                            <p>{SITE_CONFIG.footerText}</p>
+                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-nature-400 hover:text-nature-600" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
+                        </div>
+                    </footer>
+                </>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+:root {
+    --theme-50:  #f0fdf4;
+    --theme-100: #dcfce7;
+    --theme-200: #bbf7d0;
+    --theme-300: #86efac;
+    --theme-400: #4ade80;
+    --theme-500: #22c55e;
+    --theme-600: #16a34a;
+    --theme-700: #15803d;
+    --theme-800: #166534;
+    --theme-900: #14532d;
+}
+
+body { 
+    background-color: var(--theme-50); 
+}
+
+/* 毛玻璃與動畫保留原樣... */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(10px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+.animate-fade-in { 
+    animation: fadeIn 0.4s ease-out forwards; 
+}
