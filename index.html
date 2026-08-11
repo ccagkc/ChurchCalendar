@@ -819,12 +819,14 @@
                 const hasQuestion = isPlan && !!currentData['問題'];
                 const hasAnswer = isPlan && !!currentData['答案'];
 
+                // 💡 專家新增：判斷當日是否有實質讀經內容
+                const hasBibleContent = isPlan && (hasAudio || hasScripture || hasExplanation || hasQuestion || (currentData['經卷'] && String(currentData['經卷']).trim() !== ''));
+
                 const audioInfo = hasAudio ? parseExternalLink(currentData['語音連結'], 'audio') : null;
                 const scriptInfo = hasScripture ? parseExternalLink(currentData['經文'], 'doc') : null;
                 const questionInfo = hasQuestion ? parseExternalLink(currentData['問題'], 'doc') : null;
                 const answerInfo = hasAnswer ? parseExternalLink(currentData['答案'], 'doc') : null;
 
-                // 💡 專家優化：智慧連結解析器 (處理漏打 https 或意外的空白)
                 const getValidUrl = (str) => {
                     if (!str) return null;
                     const s = String(str).trim();
@@ -867,7 +869,6 @@
                                     </div>
                                 )}
                                 
-                                {/* 💡 專家優化：渲染高資安的智慧按鈕 */}
                                 {(regUrl || videoUrl) && (
                                     <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
                                         {regUrl && (
@@ -885,7 +886,8 @@
                             </article>
                         )}
 
-                        {isPlan && (
+                        {/* 💡 專家優化：僅在有實質讀經內容時，才顯示讀經區塊 */}
+                        {hasBibleContent && (
                             <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
                                 <div className="bg-nature-700 text-white p-8 md:p-10">
                                     <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
@@ -995,7 +997,8 @@
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            {isPlan ? (
+                            {/* 💡 專家優化：僅在有實質讀經內容時，才顯示完成按鈕 */}
+                            {hasBibleContent ? (
                                 <button 
                                     onClick={()=>toggleFinish(selectedDate)}
                                     className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${
@@ -1015,14 +1018,14 @@
                                      onClick={() => { setSelectedDate(allContentDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
                                      className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
                                 >
-                                    <i className="fa-solid fa-arrow-left md:mr-2"></i> <span className="hidden md:inline">前一日</span>
+                                    <i className="fa-solid fa-arrow-left md:mr-2"></i> <span className="hidden md:inline">前一項</span>
                                 </button>
                                 <button 
                                     disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} 
                                     onClick={() => { setSelectedDate(allContentDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
                                     className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
                                 >
-                                    <span className="hidden md:inline">下一日</span> <i className="fa-solid fa-arrow-right md:ml-2"></i>
+                                    <span className="hidden md:inline">下一項</span> <i className="fa-solid fa-arrow-right md:ml-2"></i>
                                 </button>
                             </div>
                         </div>
