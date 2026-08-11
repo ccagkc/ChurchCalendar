@@ -44,9 +44,9 @@
         const SITE_CONFIG = {
             SPREADSHEET_ID: '1_FfNhrUwgI3l0vOpDqWfooAVQUja-Sl-YQOna3nJyQo', 
             SHEET_NAME: 'ReadBible',
-            EVENT_SHEET_NAME: 'Event', // 💡 新增：活動分頁設定
+            EVENT_SHEET_NAME: 'Event', 
             titleLine1: "剛強壯膽 · 踐信力行",
-            titleLine2: "葵涌堂 靈命塑造月曆", // 💡 更新：新版系統名稱
+            titleLine2: "葵涌堂 靈命塑造月曆", 
             subtitle: "神的話語是我們腳前的燈、路上的光",
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
@@ -97,7 +97,7 @@
             const [showAnswer, setShowAnswer] = useState(false);
             
             const [data, setData] = useState({}); 
-            const [eventData, setEventData] = useState({}); // 💡 新增：儲存活動資料的 State
+            const [eventData, setEventData] = useState({}); 
             const [validDates, setValidDates] = useState([]); 
             const [completed, setCompleted] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -195,15 +195,13 @@
                         const bibleUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
                         const eventUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.EVENT_SHEET_NAME)}`;
 
-                        // 💡 專家級：使用 Promise.all 進行平行資料抓取，確保極致效能
                         const [bibleResp, eventResp] = await Promise.all([
                             fetch(bibleUrl),
-                            fetch(eventUrl).catch(() => null) // 防止 Event 抓取失敗時中斷整個系統
+                            fetch(eventUrl).catch(() => null) 
                         ]);
 
                         if (!bibleResp.ok) throw new Error("無法連接到讀經資料庫。請確認已發佈到網路。");
                         
-                        // --- 1. 處理讀經資料 ---
                         const bibleText = await bibleResp.text();
                         const bibleRows = parseCSV(bibleText);
                         if (bibleRows.length < 2) throw new Error("讀經資料庫格式異常。");
@@ -231,7 +229,6 @@
                         setData(items);
                         setValidDates(datesArray);
 
-                        // --- 2. 處理活動資料 ---
                         const events = {};
                         if (eventResp && eventResp.ok) {
                             const eventText = await eventResp.text();
@@ -256,7 +253,6 @@
                         }
                         setEventData(events);
 
-                        // --- 初始化視圖月份 ---
                         if (datesArray.length > 0) {
                             const todayStr = getTodayStr();
                             let initialTarget = todayStr;
@@ -755,7 +751,7 @@
                                     const isPlan = validDates.includes(dateStr);
                                     const isDone = completed.includes(dateStr);
                                     const hasEvent = !!eventData[dateStr];
-                                    const hasContent = isPlan || hasEvent; // 💡 專家邏輯：有讀經或有活動都算有內容
+                                    const hasContent = isPlan || hasEvent; 
                                     
                                     const dayData = isPlan ? data[dateStr] : null;
                                     const eventItem = hasEvent ? eventData[dateStr] : null;
@@ -788,13 +784,11 @@
                                             {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500"></i>}
                                             
                                             <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-0.5 px-0.5">
-                                                {/* 💡 渲染活動標籤 (藍色/琥珀色) */}
                                                 {hasEvent && (
                                                     <div className="w-full truncate px-1 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold shadow-sm bg-blue-100 text-blue-800 border border-blue-200">
                                                         <i className="fa-solid fa-bullhorn mr-1"></i>{eventItem['活動標題']}
                                                     </div>
                                                 )}
-                                                {/* 💡 渲染讀經類別標籤 (綠色) */}
                                                 {isPlan && dayData && String(dayData['類別'] || '').trim() !== '' && (
                                                     <div className={`px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold tracking-wider shadow-sm transition-colors ${isDone ? 'bg-emerald-200/70 text-emerald-800' : 'bg-nature-200/60 text-nature-800'}`}>
                                                         {dayData['類別']}
@@ -816,7 +810,6 @@
                 const isPlan = validDates.includes(selectedDate);
                 const isCompleted = completed.includes(selectedDate);
                 
-                // 找出有任何內容的日期列表，以供「前一天/後一天」導覽使用
                 const allContentDates = Array.from(new Set([...validDates, ...Object.keys(eventData)])).sort();
                 const currentIndex = allContentDates.indexOf(selectedDate);
 
@@ -831,6 +824,19 @@
                 const questionInfo = hasQuestion ? parseExternalLink(currentData['問題'], 'doc') : null;
                 const answerInfo = hasAnswer ? parseExternalLink(currentData['答案'], 'doc') : null;
 
+                // 💡 專家優化：智慧連結解析器 (處理漏打 https 或意外的空白)
+                const getValidUrl = (str) => {
+                    if (!str) return null;
+                    const s = String(str).trim();
+                    if (s.startsWith('http://') || s.startsWith('https://')) return s;
+                    if (s.startsWith('www.')) return `https://${s}`;
+                    if (s.includes('forms.gle') || s.includes('google.com')) return `https://${s}`;
+                    return null;
+                };
+
+                const regUrl = currentEvent ? getValidUrl(currentEvent['可報名']) : null;
+                const videoUrl = currentEvent ? getValidUrl(currentEvent['Video Link']) : null;
+
                 return (
                     <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
                         <div className="flex justify-between items-center mb-6">
@@ -840,7 +846,6 @@
                             <div className="text-gray-500 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-nature-50">{selectedDate}</div>
                         </div>
 
-                        {/* 💡 專家優化：教會活動的英雄看板 (Hero Card) */}
                         {currentEvent && (
                             <article className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
                                 <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden">
@@ -862,16 +867,17 @@
                                     </div>
                                 )}
                                 
-                                {(currentEvent['可報名'] || currentEvent['Video Link']) && (
-                                    <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30">
-                                        {currentEvent['可報名'] && (
-                                            <a href={currentEvent['可報名'].startsWith('http') ? currentEvent['可報名'] : '#'} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg">
-                                                <i className="fa-solid fa-pen-to-square mr-2"></i> 前往報名
+                                {/* 💡 專家優化：渲染高資安的智慧按鈕 */}
+                                {(regUrl || videoUrl) && (
+                                    <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
+                                        {regUrl && (
+                                            <a href={regUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg group">
+                                                <i className="fa-solid fa-pen-to-square mr-2 group-hover:scale-110 transition-transform"></i> 前往報名
                                             </a>
                                         )}
-                                        {currentEvent['Video Link'] && (
-                                            <a href={currentEvent['Video Link'].startsWith('http') ? currentEvent['Video Link'] : '#'} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg">
-                                                <i className="fa-brands fa-youtube mr-2 text-red-500"></i> 觀看宣傳片
+                                        {videoUrl && (
+                                            <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
+                                                <i className="fa-brands fa-youtube mr-2 text-red-500 group-hover:scale-110 transition-transform"></i> 觀看宣傳片
                                             </a>
                                         )}
                                     </div>
@@ -879,7 +885,6 @@
                             </article>
                         )}
 
-                        {/* 💡 原有的讀經卡片，僅在 isPlan 為 true 時渲染 */}
                         {isPlan && (
                             <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
                                 <div className="bg-nature-700 text-white p-8 md:p-10">
