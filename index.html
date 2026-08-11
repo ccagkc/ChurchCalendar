@@ -726,18 +726,19 @@
                         </div>
 
                         <div className="flex justify-between items-center bg-white p-4 md:px-8 md:py-5 rounded-[2rem] shadow-sm border border-nature-100 mb-8">
-                            <button onClick={() => changeMonth(-1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-nature-50 hover:bg-nature-100">
+                            <button onClick={() => changeMonth(-1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-nature-50 border border-gray-100 shadow-sm">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> <span className="hidden md:inline">上一月</span>
                             </button>
                             <div className="text-xl md:text-3xl font-bold text-nature-800 tracking-widest">
                                 {year}年 {month + 1}月
                             </div>
-                            <button onClick={() => changeMonth(1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-nature-50 hover:bg-nature-100">
+                            <button onClick={() => changeMonth(1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-nature-50 border border-gray-100 shadow-sm">
                                 <span className="hidden md:inline">下一月</span> <i className="fa-solid fa-chevron-right ml-2"></i>
                             </button>
                         </div>
 
-                        <section className="bg-white rounded-[2rem] shadow-lg border border-nature-100 overflow-hidden">
+                        {/* 💡 專家優化：將背景調暗，讓白色按鈕浮現 */}
+                        <section className="bg-gray-50 rounded-[2rem] shadow-lg border border-nature-100 overflow-hidden">
                             <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block">
                                 {year}年 {month + 1}月
                             </div>
@@ -758,14 +759,15 @@
                                     
                                     let btnClass = 'relative h-16 md:h-24 rounded-2xl flex flex-col items-center justify-center transition-all overflow-hidden ';
                                     
+                                    // 💡 專家優化：強化高低對比與浮雕效果
                                     if (!hasContent) {
-                                        btnClass += 'bg-gray-50 text-gray-200 cursor-not-allowed';
+                                        btnClass += 'bg-gray-100/50 text-gray-300 cursor-not-allowed border border-transparent';
                                     } else if (hasEvent && !isPlan) {
-                                        btnClass += 'bg-blue-50/50 border border-blue-200 hover:border-blue-400 hover:shadow-md cursor-pointer';
+                                        btnClass += 'bg-white border border-blue-200 hover:border-blue-400 hover:shadow-md cursor-pointer shadow-sm';
                                     } else if (isDone) {
-                                        btnClass += 'bg-nature-100 text-nature-700 border-2 border-nature-500 font-bold shadow-sm cursor-pointer';
+                                        btnClass += 'bg-nature-50 text-nature-700 border-2 border-nature-500 font-bold shadow-sm cursor-pointer';
                                     } else {
-                                        btnClass += 'bg-white border border-gray-100 hover:border-nature-300 text-gray-400 opacity-80 hover:opacity-100 cursor-pointer';
+                                        btnClass += 'bg-white border border-gray-200 hover:border-nature-300 text-gray-600 shadow-sm hover:shadow-md cursor-pointer';
                                     }
 
                                     return (
@@ -819,7 +821,6 @@
                 const hasQuestion = isPlan && !!currentData['問題'];
                 const hasAnswer = isPlan && !!currentData['答案'];
 
-                // 💡 專家新增：判斷當日是否有實質讀經內容
                 const hasBibleContent = isPlan && (hasAudio || hasScripture || hasExplanation || hasQuestion || (currentData['經卷'] && String(currentData['經卷']).trim() !== ''));
 
                 const audioInfo = hasAudio ? parseExternalLink(currentData['語音連結'], 'audio') : null;
@@ -886,7 +887,6 @@
                             </article>
                         )}
 
-                        {/* 💡 專家優化：僅在有實質讀經內容時，才顯示讀經區塊 */}
                         {hasBibleContent && (
                             <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
                                 <div className="bg-nature-700 text-white p-8 md:p-10">
@@ -997,7 +997,6 @@
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            {/* 💡 專家優化：僅在有實質讀經內容時，才顯示完成按鈕 */}
                             {hasBibleContent ? (
                                 <button 
                                     onClick={()=>toggleFinish(selectedDate)}
@@ -1105,7 +1104,8 @@
                         </div>
                     )}
 
-                    <main className="flex-grow py-8 px-4 w-full bg-nature-50/30">
+                    {/* 💡 專家優化：將背景調暗，凸顯卡片感 */}
+                    <main className="flex-grow py-8 px-4 w-full bg-slate-50">
                         {view === 'admin-dashboard' && userProfile?.role === 'admin' ? (
                             <AdminDashboard />
                         ) : view === 'reader' && selectedDate ? (
