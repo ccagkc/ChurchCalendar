@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教會恆常讀經計劃</title>
+    <title>葵涌堂靈命塑造月曆</title>
     
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -44,11 +44,12 @@
         const SITE_CONFIG = {
             SPREADSHEET_ID: '1_FfNhrUwgI3l0vOpDqWfooAVQUja-Sl-YQOna3nJyQo', 
             SHEET_NAME: 'ReadBible',
+            EVENT_SHEET_NAME: 'Event', // 💡 新增：活動分頁設定
             titleLine1: "剛強壯膽 · 踐信力行",
-            titleLine2: "葵涌堂 每日讀經計劃",
+            titleLine2: "葵涌堂 靈命塑造月曆", // 💡 更新：新版系統名稱
             subtitle: "神的話語是我們腳前的燈、路上的光",
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
-            footerText: "© CCAGKC · BIBLE READING PORTAL",
+            footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "kc-church-bible-progress-v3",
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
@@ -96,6 +97,7 @@
             const [showAnswer, setShowAnswer] = useState(false);
             
             const [data, setData] = useState({}); 
+            const [eventData, setEventData] = useState({}); // 💡 新增：儲存活動資料的 State
             const [validDates, setValidDates] = useState([]); 
             const [completed, setCompleted] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -117,7 +119,6 @@
 
             useEffect(() => {
                 let unsubscribeAuth = null;
-
                 const initFirebase = async () => {
                     try {
                         const appModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
@@ -143,12 +144,7 @@
                 
                         const settingsRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'general');
                         unsubscribeSettings.current = dbModule.onSnapshot(settingsRef, (snap) => {
-                            if (snap.exists()) {
-                                setAppSettings(snap.data());
-                            } else {
-                                setAppSettings({ groups: ['未入組/其他', '少年崇拜', '奇行組', 'IMA組', '加利利奮青', '彼得組', '隨意行組', '葡萄果組', 
-                                                      'Spectrum組', '家靈一組', '7-11組', '清心組', 'ReConnect組', '基順ECO組', '蜜組', '喜樂組'] });
-                            }
+                            if (snap.exists()) setAppSettings(snap.data());
                         }, (err) => console.warn("等待設定檔授權中:", err.message));
                 
                         unsubscribeAuth = authModule.onAuthStateChanged(auth, (user) => {
@@ -157,10 +153,7 @@
                 
                             if (user) {
                                 setCurrentUser(user);
-                                
-                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') {
-                                    setView('admin-dashboard');
-                                }
+                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') setView('admin-dashboard');
                                 
                                 const profileRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
                                 unsubscribeProfile.current = dbModule.onSnapshot(profileRef, (snap) => {
@@ -169,12 +162,12 @@
                                     } else if (user.email.endsWith(SITE_CONFIG.adminEmailDomain)) {
                                         setUserProfile({ username: user.email.split('@')[0], role: 'admin' });
                                     }
-                                }, (err) => console.warn("等待 Profile 權限同步:", err.message));
+                                });
                 
                                 const progressRef = dbModule.doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'progress');
                                 unsubscribeProgress.current = dbModule.onSnapshot(progressRef, (docSnap) => {
                                     if (docSnap.exists()) setCompleted(docSnap.data().completedDates || []);
-                                }, (err) => console.warn("等待 Progress 權限同步:", err.message));
+                                });
                             } else {
                                 setCurrentUser(null);
                                 setUserProfile(null);
@@ -182,12 +175,10 @@
                                 setView('calendar'); 
                             }
                         });
-                
                     } catch (e) {
                         console.error("Firebase 模組載入失敗", e);
                     }
                 };
-                                
                 initFirebase();
 
                 return () => { 
@@ -201,26 +192,33 @@
             useEffect(() => {
                 const fetchSheetData = async () => {
                     try {
-                        const csvUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
-                        const resp = await fetch(csvUrl);
-                        if (!resp.ok) throw new Error("無法連接到資料庫 (Google Sheet)");
-                        
-                        const text = await resp.text();
-                        const rows = parseCSV(text);
-                        if (rows.length < 2) throw new Error("資料庫格式不正確或沒有資料");
+                        const bibleUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
+                        const eventUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.EVENT_SHEET_NAME)}`;
 
-                        const headers = rows[0].map(h => h.trim());
+                        // 💡 專家級：使用 Promise.all 進行平行資料抓取，確保極致效能
+                        const [bibleResp, eventResp] = await Promise.all([
+                            fetch(bibleUrl),
+                            fetch(eventUrl).catch(() => null) // 防止 Event 抓取失敗時中斷整個系統
+                        ]);
+
+                        if (!bibleResp.ok) throw new Error("無法連接到讀經資料庫。請確認已發佈到網路。");
+                        
+                        // --- 1. 處理讀經資料 ---
+                        const bibleText = await bibleResp.text();
+                        const bibleRows = parseCSV(bibleText);
+                        if (bibleRows.length < 2) throw new Error("讀經資料庫格式異常。");
+
+                        const headers = bibleRows[0].map(h => h.trim());
                         const items = {};
                         const datesArray = [];
                         
-                        for(let i=1; i<rows.length; i++) {
-                            const row = rows[i];
+                        for(let i=1; i<bibleRows.length; i++) {
+                            const row = bibleRows[i];
                             if (!row || row.length < 2) continue;
                             const item = {};
                             headers.forEach((h, idx) => item[h] = row[idx]);
-                            
                             if(item['日期']) {
-                                const dateStr = item['日期'].replace(/\//g, '-');
+                                const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
                                 const parts = dateStr.split('-');
                                 if (parts.length === 3) {
                                     const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
@@ -233,6 +231,32 @@
                         setData(items);
                         setValidDates(datesArray);
 
+                        // --- 2. 處理活動資料 ---
+                        const events = {};
+                        if (eventResp && eventResp.ok) {
+                            const eventText = await eventResp.text();
+                            const eventRows = parseCSV(eventText);
+                            if (eventRows.length >= 2) {
+                                const eHeaders = eventRows[0].map(h => h.trim());
+                                for(let i=1; i<eventRows.length; i++) {
+                                    const row = eventRows[i];
+                                    if (!row || row.length < 2) continue;
+                                    const item = {};
+                                    eHeaders.forEach((h, idx) => item[h] = row[idx]);
+                                    if(item['日期']) {
+                                        const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
+                                        const parts = dateStr.split('-');
+                                        if (parts.length === 3) {
+                                            const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                                            events[stdDate] = item;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        setEventData(events);
+
+                        // --- 初始化視圖月份 ---
                         if (datesArray.length > 0) {
                             const todayStr = getTodayStr();
                             let initialTarget = todayStr;
@@ -644,7 +668,7 @@
             if (loading) return (
                 <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50">
                     <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i>
-                    <p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步最新讀經資料...</p>
+                    <p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步靈命塑造資料...</p>
                 </div>
             );
 
@@ -677,11 +701,11 @@
                 };
                 
                 const handleGoToday = () => {
-                    if (validDates.length > 0) {
-                        let targetDate = validDates.includes(todayStr) ? todayStr : null;
+                    if (validDates.length > 0 || Object.keys(eventData).length > 0) {
+                        let targetDate = (validDates.includes(todayStr) || eventData[todayStr]) ? todayStr : null;
                         if (!targetDate) {
-                            const pastDates = validDates.filter(d => d <= todayStr);
-                            targetDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : validDates[0];
+                            const pastDates = [...validDates, ...Object.keys(eventData)].filter(d => d <= todayStr).sort();
+                            targetDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : (validDates[0] || Object.keys(eventData)[0]);
                         }
                         const parts = targetDate.split('-');
                         setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
@@ -701,7 +725,7 @@
                                 className="px-8 py-4 bg-white border-2 border-nature-600 text-nature-700 hover:bg-nature-600 hover:text-white rounded-full font-bold shadow-lg flex items-center transition-all group active:scale-95"
                             >
                                 <i className="fa-solid fa-book-open-reader mr-3 text-nature-500 group-hover:text-white transition-colors"></i> 
-                                <span className="text-lg">進入今日閱讀</span>
+                                <span className="text-lg">進入今日閱讀與動態</span>
                             </button>
                         </div>
 
@@ -730,35 +754,28 @@
                                     const dateStr = formatDate(dateObj);
                                     const isPlan = validDates.includes(dateStr);
                                     const isDone = completed.includes(dateStr);
-                                    const hasData = !!data[dateStr];
-                                    
-                                    const hasAudio = hasData && data[dateStr]['語音連結'] && data[dateStr]['語音連結'].trim() !== '';
-                                    const hasQuestion = hasData && data[dateStr]['問題'] && data[dateStr]['問題'].trim() !== '';
+                                    const hasEvent = !!eventData[dateStr];
+                                    const hasContent = isPlan || hasEvent; // 💡 專家邏輯：有讀經或有活動都算有內容
                                     
                                     const dayData = isPlan ? data[dateStr] : null;
+                                    const eventItem = hasEvent ? eventData[dateStr] : null;
                                     
-                                    let btnClass = 'relative h-14 md:h-20 rounded-2xl flex flex-col items-center justify-center transition-all ';
+                                    let btnClass = 'relative h-16 md:h-24 rounded-2xl flex flex-col items-center justify-center transition-all overflow-hidden ';
                                     
-                                    if (!isPlan) {
+                                    if (!hasContent) {
                                         btnClass += 'bg-gray-50 text-gray-200 cursor-not-allowed';
+                                    } else if (hasEvent && !isPlan) {
+                                        btnClass += 'bg-blue-50/50 border border-blue-200 hover:border-blue-400 hover:shadow-md cursor-pointer';
                                     } else if (isDone) {
-                                        btnClass += 'bg-nature-100 text-nature-700 border-2 border-nature-500 font-bold shadow-sm';
-                                    } else if (hasData) {
-                                        if (hasAudio) {
-                                            btnClass += 'bg-purple-50/30 border border-purple-200 hover:border-purple-400 hover:shadow-md text-purple-700 font-bold';
-                                        } else if (hasQuestion) {
-                                            btnClass += 'bg-nature-50 border border-nature-300 hover:border-nature-500 hover:shadow-md text-nature-700 font-bold';
-                                        } else {
-                                            btnClass += 'bg-gray-100 border border-gray-200 hover:border-gray-400 hover:shadow-md text-gray-500 font-bold';
-                                        }
+                                        btnClass += 'bg-nature-100 text-nature-700 border-2 border-nature-500 font-bold shadow-sm cursor-pointer';
                                     } else {
-                                        btnClass += 'bg-white border border-gray-100 hover:border-nature-300 text-gray-400 opacity-60';
+                                        btnClass += 'bg-white border border-gray-100 hover:border-nature-300 text-gray-400 opacity-80 hover:opacity-100 cursor-pointer';
                                     }
 
                                     return (
                                         <button 
                                             key={dateStr}
-                                            disabled={!isPlan}
+                                            disabled={!hasContent}
                                             onClick={() => { 
                                                 setSelectedDate(dateStr); 
                                                 setView('reader'); 
@@ -767,19 +784,23 @@
                                             }}
                                             className={btnClass}
                                         >
-                                            <span className="text-lg md:text-xl">{dateObj.getDate()}</span>
-                                            {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-1"></i>}
+                                            <span className={`text-lg md:text-xl font-bold ${hasEvent && !isPlan ? 'text-blue-700' : ''}`}>{dateObj.getDate()}</span>
+                                            {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500"></i>}
                                             
-                                            {/* 💡 專家優化：僅顯示「類別」標籤，移除「經卷」以保持版面極簡 */}
-                                            {isPlan && dayData && (
-                                                <div className="mt-auto pt-1 pb-1 relative z-10 w-full flex flex-col items-center">
-                                                    {String(dayData['類別'] || '').trim() !== '' && (
-                                                        <div className={`px-2 py-1 rounded text-[9px] md:text-xs font-sans font-bold tracking-wider shadow-sm transition-colors ${isDone ? 'bg-emerald-200/70 text-emerald-800' : 'bg-nature-200/60 text-nature-800'}`}>
-                                                            {dayData['類別']}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                            <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-0.5 px-0.5">
+                                                {/* 💡 渲染活動標籤 (藍色/琥珀色) */}
+                                                {hasEvent && (
+                                                    <div className="w-full truncate px-1 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold shadow-sm bg-blue-100 text-blue-800 border border-blue-200">
+                                                        <i className="fa-solid fa-bullhorn mr-1"></i>{eventItem['活動標題']}
+                                                    </div>
+                                                )}
+                                                {/* 💡 渲染讀經類別標籤 (綠色) */}
+                                                {isPlan && dayData && String(dayData['類別'] || '').trim() !== '' && (
+                                                    <div className={`px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold tracking-wider shadow-sm transition-colors ${isDone ? 'bg-emerald-200/70 text-emerald-800' : 'bg-nature-200/60 text-nature-800'}`}>
+                                                        {dayData['類別']}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </button>
                                     );
                                 }))}
@@ -791,21 +812,24 @@
 
             const renderReaderView = () => {
                 const currentData = data[selectedDate] || {};
-                if (!currentData || Object.keys(currentData).length === 0) return null;
+                const currentEvent = eventData[selectedDate] || null;
+                const isPlan = validDates.includes(selectedDate);
+                const isCompleted = completed.includes(selectedDate);
+                
+                // 找出有任何內容的日期列表，以供「前一天/後一天」導覽使用
+                const allContentDates = Array.from(new Set([...validDates, ...Object.keys(eventData)])).sort();
+                const currentIndex = allContentDates.indexOf(selectedDate);
 
-                const hasAudio = !!currentData['語音連結'];
-                const hasScripture = !!currentData['經文'];
-                const hasExplanation = !!currentData['釋義'];
-                const hasQuestion = !!currentData['問題'];
-                const hasAnswer = !!currentData['答案'];
+                const hasAudio = isPlan && !!currentData['語音連結'];
+                const hasScripture = isPlan && !!currentData['經文'];
+                const hasExplanation = isPlan && !!currentData['釋義'];
+                const hasQuestion = isPlan && !!currentData['問題'];
+                const hasAnswer = isPlan && !!currentData['答案'];
 
                 const audioInfo = hasAudio ? parseExternalLink(currentData['語音連結'], 'audio') : null;
                 const scriptInfo = hasScripture ? parseExternalLink(currentData['經文'], 'doc') : null;
                 const questionInfo = hasQuestion ? parseExternalLink(currentData['問題'], 'doc') : null;
                 const answerInfo = hasAnswer ? parseExternalLink(currentData['答案'], 'doc') : null;
-
-                const isCompleted = completed.includes(selectedDate);
-                const currentIndex = validDates.indexOf(selectedDate);
 
                 return (
                     <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
@@ -816,137 +840,184 @@
                             <div className="text-gray-500 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-nature-50">{selectedDate}</div>
                         </div>
 
-                        <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
-                            <div className="bg-nature-700 text-white p-8 md:p-10">
-                                <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
-                                    <i className="fa-solid fa-book-open-reader"></i>
-                                    <span>今日內容</span>
+                        {/* 💡 專家優化：教會活動的英雄看板 (Hero Card) */}
+                        {currentEvent && (
+                            <article className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
+                                <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden">
+                                     <i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i>
+                                     <div className="relative z-10">
+                                         <div className="flex items-center space-x-2 text-blue-200 text-sm font-bold tracking-[0.2em] mb-3">
+                                             <i className="fa-solid fa-calendar-star"></i>
+                                             <span>教會動態速遞</span>
+                                         </div>
+                                         <h2 className="text-3xl md:text-4xl font-sans font-bold leading-tight">
+                                             {currentEvent['內頁標題'] || currentEvent['活動標題']}
+                                         </h2>
+                                     </div>
                                 </div>
-                                <h2 className="text-3xl md:text-4xl font-serif font-bold">
-                                    {currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}
-                                </h2>
-                            </div>
-                            
-                            <div className="p-6 md:p-10 space-y-12">
-                                {audioInfo && (
-                                    <section className="bg-nature-50/50 p-6 rounded-3xl border border-nature-100 shadow-inner">
-                                        <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm">
-                                            <i className="fa-solid fa-circle-play mr-2 text-nature-600"></i> 語音朗讀
-                                        </h4>
-                                        {audioInfo.type === 'embed' ? (
-                                            <iframe src={audioInfo.url} className="w-full h-16 border-0 rounded-xl bg-transparent"></iframe>
-                                        ) : (
-                                            <audio controls className="w-full h-10"><source src={audioInfo.url}/></audio>
+                                
+                                {currentEvent['活動詳情'] && (
+                                    <div className="p-6 md:p-10 text-gray-700 leading-loose text-lg whitespace-pre-wrap font-sans border-b border-gray-100">
+                                        {currentEvent['活動詳情']}
+                                    </div>
+                                )}
+                                
+                                {(currentEvent['可報名'] || currentEvent['Video Link']) && (
+                                    <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30">
+                                        {currentEvent['可報名'] && (
+                                            <a href={currentEvent['可報名'].startsWith('http') ? currentEvent['可報名'] : '#'} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg">
+                                                <i className="fa-solid fa-pen-to-square mr-2"></i> 前往報名
+                                            </a>
                                         )}
-                                    </section>
+                                        {currentEvent['Video Link'] && (
+                                            <a href={currentEvent['Video Link'].startsWith('http') ? currentEvent['Video Link'] : '#'} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg">
+                                                <i className="fa-brands fa-youtube mr-2 text-red-500"></i> 觀看宣傳片
+                                            </a>
+                                        )}
+                                    </div>
                                 )}
+                            </article>
+                        )}
 
-                                {hasScripture && (
-                                    <section>
-                                        <div className="flex justify-between items-end mb-6">
-                                            <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">聖經經文</h4>
-                                            {currentData['經文'].includes('http') && (
-                                                <a href={currentData['經文']} target="_blank" className="text-xs text-nature-600 hover:underline font-bold">
-                                                    <i className="fa-solid fa-up-right-from-square mr-1"></i> 全螢幕閱讀
-                                                </a>
-                                            )}
-                                        </div>
-                                        <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[100px]">
-                                            {scriptInfo && scriptInfo.type === 'embed' ? (
-                                                <div className="relative pt-[130%] md:pt-[100%] w-full">
-                                                    <iframe src={scriptInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
-                                                </div>
+                        {/* 💡 原有的讀經卡片，僅在 isPlan 為 true 時渲染 */}
+                        {isPlan && (
+                            <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
+                                <div className="bg-nature-700 text-white p-8 md:p-10">
+                                    <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
+                                        <i className="fa-solid fa-book-open-reader"></i>
+                                        <span>今日內容</span>
+                                    </div>
+                                    <h2 className="text-3xl md:text-4xl font-serif font-bold">
+                                        {currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}
+                                    </h2>
+                                </div>
+                                
+                                <div className="p-6 md:p-10 space-y-12">
+                                    {audioInfo && (
+                                        <section className="bg-nature-50/50 p-6 rounded-3xl border border-nature-100 shadow-inner">
+                                            <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm">
+                                                <i className="fa-solid fa-circle-play mr-2 text-nature-600"></i> 語音朗讀
+                                            </h4>
+                                            {audioInfo.type === 'embed' ? (
+                                                <iframe src={audioInfo.url} className="w-full h-16 border-0 rounded-xl bg-transparent"></iframe>
                                             ) : (
-                                                <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
-                                                    {currentData['經文']}
-                                                </div>
+                                                <audio controls className="w-full h-10"><source src={audioInfo.url}/></audio>
                                             )}
-                                        </div>
-                                    </section>
-                                )}
+                                        </section>
+                                    )}
 
-                                {hasExplanation && (
-                                    <section>
-                                        <h4 className="text-nature-700 font-bold mb-4 border-l-4 border-nature-500 pl-3">經文釋義</h4>
-                                        <div className="bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-50 text-gray-600 leading-loose text-base md:text-lg italic font-serif">
-                                            {currentData['釋義']}
-                                        </div>
-                                    </section>
-                                )}
-
-                                {hasQuestion && (
-                                    <section className="pt-6 border-t border-dashed border-nature-200">
-                                        <div className="flex justify-between items-end mb-6">
-                                            <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">將神的話讀入心</h4>
-                                        </div>
-                                        <div className="rounded-2xl overflow-hidden bg-white border-2 border-nature-100 min-h-[100px]">
-                                            {questionInfo && questionInfo.type === 'embed' ? (
-                                                <div className="relative pt-[130%] md:pt-[100%] w-full">
-                                                    <iframe src={questionInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
-                                                </div>
-                                            ) : (
-                                                <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
-                                                    {currentData['問題']}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {hasAnswer && (
-                                            <div className="mt-6">
-                                                {!showAnswer ? (
-                                                    <button 
-                                                        onClick={() => setShowAnswer(true)}
-                                                        className="px-6 py-3 bg-nature-100 hover:bg-nature-200 text-nature-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center"
-                                                    >
-                                                        <i className="fa-solid fa-lightbulb mr-2"></i> 顯示參考答案
-                                                    </button>
+                                    {hasScripture && (
+                                        <section>
+                                            <div className="flex justify-between items-end mb-6">
+                                                <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">聖經經文</h4>
+                                                {currentData['經文'].includes('http') && (
+                                                    <a href={currentData['經文']} target="_blank" className="text-xs text-nature-600 hover:underline font-bold">
+                                                        <i className="fa-solid fa-up-right-from-square mr-1"></i> 全螢幕閱讀
+                                                    </a>
+                                                )}
+                                            </div>
+                                            <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[100px]">
+                                                {scriptInfo && scriptInfo.type === 'embed' ? (
+                                                    <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                        <iframe src={scriptInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                    </div>
                                                 ) : (
-                                                    <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in">
-                                                        <h4 className="text-nature-700 font-bold mb-4 flex items-center border-b border-nature-200 pb-3">
-                                                            <i className="fa-solid fa-key mr-2"></i> 參考答案
-                                                        </h4>
-                                                        {answerInfo && answerInfo.type === 'embed' ? (
-                                                            <div className="relative pt-[130%] md:pt-[100%] w-full mt-4">
-                                                                <iframe src={answerInfo.url} className="absolute inset-0 w-full h-full border-0 rounded-xl"></iframe>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-lg md:text-xl leading-loose font-serif text-gray-700 whitespace-pre-wrap">
-                                                                {currentData['答案']}
-                                                            </div>
-                                                        )}
+                                                    <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
+                                                        {currentData['經文']}
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
-                                    </section>
-                                )}
-                            </div>
-                        </article>
+                                        </section>
+                                    )}
+
+                                    {hasExplanation && (
+                                        <section>
+                                            <h4 className="text-nature-700 font-bold mb-4 border-l-4 border-nature-500 pl-3">經文釋義</h4>
+                                            <div className="bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-50 text-gray-600 leading-loose text-base md:text-lg italic font-serif">
+                                                {currentData['釋義']}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {hasQuestion && (
+                                        <section className="pt-6 border-t border-dashed border-nature-200">
+                                            <div className="flex justify-between items-end mb-6">
+                                                <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">將神的話讀入心</h4>
+                                            </div>
+                                            <div className="rounded-2xl overflow-hidden bg-white border-2 border-nature-100 min-h-[100px]">
+                                                {questionInfo && questionInfo.type === 'embed' ? (
+                                                    <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                        <iframe src={questionInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-6 md:p-8 text-lg md:text-xl leading-loose font-serif text-gray-800 whitespace-pre-wrap">
+                                                        {currentData['問題']}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {hasAnswer && (
+                                                <div className="mt-6">
+                                                    {!showAnswer ? (
+                                                        <button 
+                                                            onClick={() => setShowAnswer(true)}
+                                                            className="px-6 py-3 bg-nature-100 hover:bg-nature-200 text-nature-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center"
+                                                        >
+                                                            <i className="fa-solid fa-lightbulb mr-2"></i> 顯示參考答案
+                                                        </button>
+                                                    ) : (
+                                                        <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in">
+                                                            <h4 className="text-nature-700 font-bold mb-4 flex items-center border-b border-nature-200 pb-3">
+                                                                <i className="fa-solid fa-key mr-2"></i> 參考答案
+                                                            </h4>
+                                                            {answerInfo && answerInfo.type === 'embed' ? (
+                                                                <div className="relative pt-[130%] md:pt-[100%] w-full mt-4">
+                                                                    <iframe src={answerInfo.url} className="absolute inset-0 w-full h-full border-0 rounded-xl"></iframe>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-lg md:text-xl leading-loose font-serif text-gray-700 whitespace-pre-wrap">
+                                                                    {currentData['答案']}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </section>
+                                    )}
+                                </div>
+                            </article>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                           <button 
-                                onClick={()=>toggleFinish(selectedDate)}
-                                className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${
-                                    isCompleted ? 'bg-white text-nature-600 border-2 border-nature-600' : 'bg-nature-600 text-white hover:bg-nature-700'
-                                }`}
-                            >
-                                {syncing ? <i className="fa-solid fa-spinner fa-spin mr-3 text-xl"></i> : <i className={`fa-solid mr-3 text-xl ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i>}
-                                {isCompleted ? '我已完成今日進度' : '標記今日完成'}
-                            </button>
+                            {isPlan ? (
+                                <button 
+                                    onClick={()=>toggleFinish(selectedDate)}
+                                    className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${
+                                        isCompleted ? 'bg-white text-nature-600 border-2 border-nature-600' : 'bg-nature-600 text-white hover:bg-nature-700'
+                                    }`}
+                                >
+                                    {syncing ? <i className="fa-solid fa-spinner fa-spin mr-3 text-xl"></i> : <i className={`fa-solid mr-3 text-xl ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i>}
+                                    {isCompleted ? '我已完成今日進度' : '標記今日完成'}
+                                </button>
+                            ) : (
+                                <div className="md:col-span-2 hidden md:block"></div>
+                            )}
+                            
                             <div className="flex gap-2">
                                 <button 
-                                     disabled={currentIndex === 0} 
-                                     onClick={() => { setSelectedDate(validDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                     disabled={currentIndex <= 0} 
+                                     onClick={() => { setSelectedDate(allContentDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
                                      className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
                                 >
-                                    <i className="fa-solid fa-arrow-left mr-2"></i> <span className="hidden md:inline">前一天</span>
+                                    <i className="fa-solid fa-arrow-left md:mr-2"></i> <span className="hidden md:inline">前一日</span>
                                 </button>
                                 <button 
-                                    disabled={currentIndex === validDates.length - 1} 
-                                    onClick={() => { setSelectedDate(validDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                    disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} 
+                                    onClick={() => { setSelectedDate(allContentDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
                                     className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
                                 >
-                                    <span className="hidden md:inline">後一天</span> <i className="fa-solid fa-arrow-right ml-2"></i>
+                                    <span className="hidden md:inline">下一日</span> <i className="fa-solid fa-arrow-right md:ml-2"></i>
                                 </button>
                             </div>
                         </div>
