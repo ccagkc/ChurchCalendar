@@ -726,24 +726,25 @@
                         </div>
 
                         <div className="flex justify-between items-center bg-white p-4 md:px-8 md:py-5 rounded-[2rem] shadow-sm border border-nature-100 mb-8">
-                            <button onClick={() => changeMonth(-1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-nature-50 border border-gray-100 shadow-sm">
+                            <button onClick={() => changeMonth(-1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-slate-100 border border-gray-200 shadow-sm">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> <span className="hidden md:inline">上一月</span>
                             </button>
                             <div className="text-xl md:text-3xl font-bold text-nature-800 tracking-widest">
                                 {year}年 {month + 1}月
                             </div>
-                            <button onClick={() => changeMonth(1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-nature-50 border border-gray-100 shadow-sm">
+                            <button onClick={() => changeMonth(1)} className="px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold transition flex items-center justify-center text-nature-700 bg-white hover:bg-slate-100 border border-gray-200 shadow-sm">
                                 <span className="hidden md:inline">下一月</span> <i className="fa-solid fa-chevron-right ml-2"></i>
                             </button>
                         </div>
 
-                        {/* 💡 專家優化：將背景調暗，讓白色按鈕浮現 */}
-                        <section className="bg-gray-50 rounded-[2rem] shadow-lg border border-nature-100 overflow-hidden">
-                            <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block">
+                        {/* 💡 專家視覺優化：容器加深為 slate-100 以突顯白色方格 */}
+                        <section className="bg-slate-100 rounded-[2.5rem] shadow-xl border border-slate-300 overflow-hidden p-1">
+                            <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block rounded-t-[2.2rem] mx-[-4px] mt-[-4px] mb-2">
                                 {year}年 {month + 1}月
                             </div>
                             <div className="p-4 md:p-6 grid grid-cols-7 gap-2 md:gap-3">
-                                {['日','一','二','三','四','五','六'].map(d => <div key={d} className="text-center text-gray-400 text-xs md:text-sm font-bold py-1 uppercase">{d}</div>)}
+                                {/* 💡 專家視覺優化：星期文字加深 */}
+                                {['日','一','二','三','四','五','六'].map(d => <div key={d} className="text-center text-slate-500 text-xs md:text-sm font-bold py-2 uppercase">{d}</div>)}
                                 
                                 {grid.map((week, wi) => week.map((dateObj, di) => {
                                     if(!dateObj) return <div key={`empty-${wi}-${di}`}></div>;
@@ -759,15 +760,15 @@
                                     
                                     let btnClass = 'relative h-16 md:h-24 rounded-2xl flex flex-col items-center justify-center transition-all overflow-hidden ';
                                     
-                                    // 💡 專家優化：強化高低對比與浮雕效果
+                                    // 💡 專家視覺優化：強化高低對比與浮雕效果
                                     if (!hasContent) {
-                                        btnClass += 'bg-gray-100/50 text-gray-300 cursor-not-allowed border border-transparent';
+                                        btnClass += 'bg-slate-200/50 text-slate-400 cursor-not-allowed border border-dashed border-slate-300';
                                     } else if (hasEvent && !isPlan) {
-                                        btnClass += 'bg-white border border-blue-200 hover:border-blue-400 hover:shadow-md cursor-pointer shadow-sm';
+                                        btnClass += 'bg-white border border-blue-300 hover:border-blue-500 hover:shadow-md cursor-pointer shadow-md';
                                     } else if (isDone) {
-                                        btnClass += 'bg-nature-50 text-nature-700 border-2 border-nature-500 font-bold shadow-sm cursor-pointer';
+                                        btnClass += 'bg-nature-50 text-nature-800 border-2 border-nature-500 font-bold shadow-md cursor-pointer';
                                     } else {
-                                        btnClass += 'bg-white border border-gray-200 hover:border-nature-300 text-gray-600 shadow-sm hover:shadow-md cursor-pointer';
+                                        btnClass += 'bg-white border border-slate-300 hover:border-nature-400 text-slate-700 shadow-md hover:shadow-lg cursor-pointer font-medium';
                                     }
 
                                     return (
@@ -783,7 +784,7 @@
                                             className={btnClass}
                                         >
                                             <span className={`text-lg md:text-xl font-bold ${hasEvent && !isPlan ? 'text-blue-700' : ''}`}>{dateObj.getDate()}</span>
-                                            {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500"></i>}
+                                            {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500 drop-shadow-sm"></i>}
                                             
                                             <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-0.5 px-0.5">
                                                 {hasEvent && (
@@ -843,10 +844,10 @@
                 return (
                     <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
                         <div className="flex justify-between items-center mb-6">
-                            <button onClick={()=>{ setView('calendar'); setShowAnswer(false); }} className="bg-white px-4 py-2 rounded-full border border-nature-200 text-nature-700 font-medium hover:bg-nature-50 shadow-sm flex items-center text-sm transition">
+                            <button onClick={()=>{ setView('calendar'); setShowAnswer(false); }} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
                             </button>
-                            <div className="text-gray-500 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-nature-50">{selectedDate}</div>
+                            <div className="text-gray-600 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">{selectedDate}</div>
                         </div>
 
                         {currentEvent && (
@@ -888,7 +889,7 @@
                         )}
 
                         {hasBibleContent && (
-                            <article className="bg-white rounded-[2.5rem] shadow-2xl border border-nature-100 overflow-hidden mb-8">
+                            <article className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden mb-8">
                                 <div className="bg-nature-700 text-white p-8 md:p-10">
                                     <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
                                         <i className="fa-solid fa-book-open-reader"></i>
@@ -923,7 +924,7 @@
                                                     </a>
                                                 )}
                                             </div>
-                                            <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 min-h-[100px]">
+                                            <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 min-h-[100px] shadow-inner">
                                                 {scriptInfo && scriptInfo.type === 'embed' ? (
                                                     <div className="relative pt-[130%] md:pt-[100%] w-full">
                                                         <iframe src={scriptInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
@@ -940,18 +941,18 @@
                                     {hasExplanation && (
                                         <section>
                                             <h4 className="text-nature-700 font-bold mb-4 border-l-4 border-nature-500 pl-3">經文釋義</h4>
-                                            <div className="bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-50 text-gray-600 leading-loose text-base md:text-lg italic font-serif">
+                                            <div className="bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-100 text-gray-700 leading-loose text-base md:text-lg italic font-serif">
                                                 {currentData['釋義']}
                                             </div>
                                         </section>
                                     )}
 
                                     {hasQuestion && (
-                                        <section className="pt-6 border-t border-dashed border-nature-200">
+                                        <section className="pt-6 border-t border-dashed border-slate-300">
                                             <div className="flex justify-between items-end mb-6">
                                                 <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">將神的話讀入心</h4>
                                             </div>
-                                            <div className="rounded-2xl overflow-hidden bg-white border-2 border-nature-100 min-h-[100px]">
+                                            <div className="rounded-2xl overflow-hidden bg-white border-2 border-slate-100 min-h-[100px]">
                                                 {questionInfo && questionInfo.type === 'embed' ? (
                                                     <div className="relative pt-[130%] md:pt-[100%] w-full">
                                                         <iframe src={questionInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
@@ -968,14 +969,14 @@
                                                     {!showAnswer ? (
                                                         <button 
                                                             onClick={() => setShowAnswer(true)}
-                                                            className="px-6 py-3 bg-nature-100 hover:bg-nature-200 text-nature-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center"
+                                                            className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center"
                                                         >
-                                                            <i className="fa-solid fa-lightbulb mr-2"></i> 顯示參考答案
+                                                            <i className="fa-solid fa-lightbulb mr-2 text-amber-500"></i> 顯示參考答案
                                                         </button>
                                                     ) : (
-                                                        <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in">
+                                                        <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in shadow-inner">
                                                             <h4 className="text-nature-700 font-bold mb-4 flex items-center border-b border-nature-200 pb-3">
-                                                                <i className="fa-solid fa-key mr-2"></i> 參考答案
+                                                                <i className="fa-solid fa-key mr-2 text-nature-500"></i> 參考答案
                                                             </h4>
                                                             {answerInfo && answerInfo.type === 'embed' ? (
                                                                 <div className="relative pt-[130%] md:pt-[100%] w-full mt-4">
@@ -1001,7 +1002,7 @@
                                 <button 
                                     onClick={()=>toggleFinish(selectedDate)}
                                     className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${
-                                        isCompleted ? 'bg-white text-nature-600 border-2 border-nature-600' : 'bg-nature-600 text-white hover:bg-nature-700'
+                                        isCompleted ? 'bg-white text-nature-600 border-2 border-nature-500' : 'bg-nature-600 text-white hover:bg-nature-700'
                                     }`}
                                 >
                                     {syncing ? <i className="fa-solid fa-spinner fa-spin mr-3 text-xl"></i> : <i className={`fa-solid mr-3 text-xl ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i>}
@@ -1015,14 +1016,14 @@
                                 <button 
                                      disabled={currentIndex <= 0} 
                                      onClick={() => { setSelectedDate(allContentDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
-                                     className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
+                                     className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md flex items-center justify-center font-bold transition hover:bg-slate-50"
                                 >
                                     <i className="fa-solid fa-arrow-left md:mr-2"></i> <span className="hidden md:inline">前一項</span>
                                 </button>
                                 <button 
                                     disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} 
                                     onClick={() => { setSelectedDate(allContentDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
-                                    className="flex-1 py-5 rounded-2xl bg-white border border-nature-200 text-nature-700 disabled:opacity-20 shadow-lg flex items-center justify-center font-bold transition hover:bg-nature-50"
+                                    className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md flex items-center justify-center font-bold transition hover:bg-slate-50"
                                 >
                                     <span className="hidden md:inline">下一項</span> <i className="fa-solid fa-arrow-right md:ml-2"></i>
                                 </button>
@@ -1032,9 +1033,9 @@
                         <div className="flex justify-center mb-16">
                             <button 
                                 onClick={()=>{ setView('calendar'); setShowAnswer(false); window.scrollTo(0,0); }} 
-                                className="w-full md:w-auto px-10 py-4 bg-white border-2 border-nature-200 text-nature-700 rounded-2xl shadow-sm hover:bg-nature-50 hover:border-nature-400 font-bold flex items-center justify-center transition-all group active:scale-95"
+                                className="w-full md:w-auto px-10 py-4 bg-slate-800 text-white rounded-2xl shadow-lg hover:bg-slate-700 font-bold flex items-center justify-center transition-all group active:scale-95"
                             >
-                                <i className="fa-solid fa-house mr-3 text-nature-500 group-hover:text-nature-600 transition-colors"></i> 
+                                <i className="fa-solid fa-house mr-3 group-hover:scale-110 transition-transform"></i> 
                                 <span className="text-lg">返回月曆主頁</span>
                             </button>
                         </div>
@@ -1054,24 +1055,24 @@
                 <>
                     <AuthModal />
                     <AdminLoginModal />
-                    <header className="bg-white/70 backdrop-blur-md border-b border-white/50 shadow-sm sticky top-0 z-40">
+                    <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
                         <div className="max-w-5xl mx-auto px-4 py-4 md:py-5 flex justify-between items-center gap-2">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={()=>setView('calendar')}><i className="fa-solid fa-cross text-xl"></i></div>
-                                <div><h1 className="text-xl md:text-2xl font-bold text-nature-900 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
+                                <div><h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
                             </div>
                             
                             {fb && (
                                 <div className="flex items-center gap-2">
                                     {currentUser ? (
                                         <div className="group relative">
-                                            <button className={`flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm ${userProfile?.role === 'admin' ? 'bg-gray-800 text-white border-gray-900' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                            <button className={`flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm ${userProfile?.role === 'admin' ? 'bg-slate-800 text-white border-slate-900' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
                                                 <i className={`fa-solid ${userProfile?.role === 'admin' ? 'fa-shield-halved' : 'fa-cloud-check'}`}></i> 
                                                 <span>{currentUser.email.split('@')[0]}</span>
                                             </button>
-                                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden">
                                                 {userProfile?.role === 'admin' && view !== 'admin-dashboard' && (
-                                                    <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-nature-700 hover:bg-nature-50 font-bold border-b"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>
+                                                    <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>
                                                 )}
                                                 <button onClick={()=>{ 
                                                     setCompleted([]); 
@@ -1079,11 +1080,11 @@
                                                     setUserProfile(null);
                                                     setView('calendar'); 
                                                     fb.authModule.signOut(fb.auth); 
-                                                }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-b-xl font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
+                                                }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-nature-200 hover:border-nature-400 text-nature-600 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95">
+                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 hover:border-nature-500 text-slate-700 hover:text-nature-700 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95">
                                             <i className="fa-solid fa-cloud-arrow-up"></i> <span className="hidden md:inline">登入 / 註冊</span>
                                         </button>
                                     )}
@@ -1104,8 +1105,8 @@
                         </div>
                     )}
 
-                    {/* 💡 專家優化：將背景調暗，凸顯卡片感 */}
-                    <main className="flex-grow py-8 px-4 w-full bg-slate-50">
+                    {/* 💡 專家視覺優化：深層底色 slate-200/70 */}
+                    <main className="flex-grow py-8 px-4 w-full bg-slate-200/70">
                         {view === 'admin-dashboard' && userProfile?.role === 'admin' ? (
                             <AdminDashboard />
                         ) : view === 'reader' && selectedDate ? (
@@ -1115,11 +1116,11 @@
                         )}
                     </main>
 
-                    <footer className="py-10 bg-white border-t border-nature-100 text-center text-gray-400 text-[10px] tracking-widest uppercase mt-auto">
-                        <p className="mb-2"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
+                    <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 text-[10px] tracking-widest uppercase mt-auto">
+                        <p className="mb-2 text-slate-300"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
                         <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition">
                             <p>{SITE_CONFIG.footerText}</p>
-                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-nature-400 hover:text-nature-600" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
+                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
                         </div>
                     </footer>
                 </>
