@@ -51,6 +51,7 @@
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "kc-church-bible-progress-v3",
+            cacheKey: "kc-church-data-cache-v1", // 💡 新增：SWR 資料快取 Key
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
         };
@@ -117,6 +118,7 @@
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
 
+            // 初始化 Firebase
             useEffect(() => {
                 let unsubscribeAuth = null;
                 const initFirebase = async () => {
@@ -189,9 +191,22 @@
                 };
             }, []);
 
+            // 💡 專家級：SWR 快取架構與背景同步資料
             useEffect(() => {
                 const fetchSheetData = async () => {
                     try {
+                        // 1. 先嘗試從本機 LocalStorage 載入資料 (實現 0 秒閃電渲染)
+                        const cachedDataStr = localStorage.getItem(SITE_CONFIG.cacheKey);
+                        if (cachedDataStr) {
+                            const cached = JSON.parse(cachedDataStr);
+                            setData(cached.bible);
+                            setEventData(cached.events);
+                            setValidDates(cached.datesArray);
+                            initViewMonth(cached.datesArray, cached.bible);
+                            setLoading(false); // 隱藏載入畫面，讓用戶立刻開始使用
+                        }
+
+                        // 2. 在背景重新抓取最新資料 (平行非同步)
                         const bibleUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
                         const eventUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.EVENT_SHEET_NAME)}`;
 
@@ -200,11 +215,14 @@
                             fetch(eventUrl).catch(() => null) 
                         ]);
 
-                        if (!bibleResp.ok) throw new Error("無法連接到讀經資料庫。請確認已發佈到網路。");
+                        if (!bibleResp.ok) {
+                            if (!cachedDataStr) throw new Error("無法連接到讀經資料庫。請確認已發佈到網路。");
+                            return; // 若有快取但斷網，則繼續使用快取
+                        }
                         
                         const bibleText = await bibleResp.text();
                         const bibleRows = parseCSV(bibleText);
-                        if (bibleRows.length < 2) throw new Error("讀經資料庫格式異常。");
+                        if (bibleRows.length < 2 && !cachedDataStr) throw new Error("讀經資料庫格式異常。");
 
                         const headers = bibleRows[0].map(h => h.trim());
                         const items = {};
@@ -226,9 +244,7 @@
                             }
                         }
                         datesArray.sort();
-                        setData(items);
-                        setValidDates(datesArray);
-
+                        
                         const events = {};
                         if (eventResp && eventResp.ok) {
                             const eventText = await eventResp.text();
@@ -251,24 +267,37 @@
                                 }
                             }
                         }
-                        setEventData(events);
 
-                        if (datesArray.length > 0) {
-                            const todayStr = getTodayStr();
-                            let initialTarget = todayStr;
-                            if (!items[todayStr]) {
-                                const pastDates = datesArray.filter(d => d <= todayStr);
-                                initialTarget = pastDates.length > 0 ? pastDates[pastDates.length - 1] : datesArray[0];
-                            }
-                            const parts = initialTarget.split('-');
-                            setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                        // 3. 更新畫面與本機快取
+                        setData(items);
+                        setEventData(events);
+                        setValidDates(datesArray);
+                        localStorage.setItem(SITE_CONFIG.cacheKey, JSON.stringify({ bible: items, events: events, datesArray: datesArray }));
+                        
+                        if (!cachedDataStr) {
+                            initViewMonth(datesArray, items);
                         }
+                        setLoading(false);
+
                     } catch (e) {
-                        setError(e.message);
-                    } finally {
+                        if (!data || Object.keys(data).length === 0) setError(e.message);
                         setLoading(false);
                     }
                 };
+
+                const initViewMonth = (dates, items) => {
+                    if (dates.length > 0) {
+                        const todayStr = getTodayStr();
+                        let initialTarget = todayStr;
+                        if (!items[todayStr]) {
+                            const pastDates = dates.filter(d => d <= todayStr);
+                            initialTarget = pastDates.length > 0 ? pastDates[pastDates.length - 1] : dates[0];
+                        }
+                        const parts = initialTarget.split('-');
+                        setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                    }
+                };
+
                 fetchSheetData();
             }, []);
             
@@ -410,13 +439,13 @@
                 const [password, setPassword] = useState('');
                 const [isRegister, setIsRegister] = useState(false);
                 const [errorMsg, setErrorMsg] = useState('');
-                const [loading, setLoading] = useState(false);
+                const [authLoading, setAuthLoading] = useState(false);
 
                 if (!showAdminLogin) return null;
 
                 const handleAdminAuth = async (e) => {
                     e.preventDefault();
-                    setLoading(true);
+                    setAuthLoading(true);
                     setErrorMsg('');
                     const adminEmail = `admin${SITE_CONFIG.adminEmailDomain}`;
                     
@@ -444,7 +473,7 @@
                             setErrorMsg(err.message);
                         }
                     } finally {
-                        setLoading(false);
+                        setAuthLoading(false);
                     }
                 };
 
@@ -468,8 +497,8 @@
                                     <label htmlFor="regAdmin" className="text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition">首次使用 (建立管理員密碼)</label>
                                 </div>
                                 
-                                <button type="submit" disabled={loading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
-                                    {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
+                                <button type="submit" disabled={authLoading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
+                                    {authLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
                                 </button>
                             </form>
                         </div>
@@ -662,7 +691,7 @@
             };
 
             if (loading) return (
-                <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50">
+                <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50 min-h-[50vh]">
                     <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i>
                     <p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步靈命塑造資料...</p>
                 </div>
@@ -737,13 +766,11 @@
                             </button>
                         </div>
 
-                        {/* 💡 專家視覺優化：容器加深為 slate-100 以突顯白色方格 */}
                         <section className="bg-slate-100 rounded-[2.5rem] shadow-xl border border-slate-300 overflow-hidden p-1">
                             <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block rounded-t-[2.2rem] mx-[-4px] mt-[-4px] mb-2">
                                 {year}年 {month + 1}月
                             </div>
                             <div className="p-4 md:p-6 grid grid-cols-7 gap-2 md:gap-3">
-                                {/* 💡 專家視覺優化：星期文字加深 */}
                                 {['日','一','二','三','四','五','六'].map(d => <div key={d} className="text-center text-slate-500 text-xs md:text-sm font-bold py-2 uppercase">{d}</div>)}
                                 
                                 {grid.map((week, wi) => week.map((dateObj, di) => {
@@ -760,7 +787,6 @@
                                     
                                     let btnClass = 'relative h-16 md:h-24 rounded-2xl flex flex-col items-center justify-center transition-all overflow-hidden ';
                                     
-                                    // 💡 專家視覺優化：強化高低對比與浮雕效果
                                     if (!hasContent) {
                                         btnClass += 'bg-slate-200/50 text-slate-400 cursor-not-allowed border border-dashed border-slate-300';
                                     } else if (hasEvent && !isPlan) {
@@ -841,20 +867,66 @@
                 const regUrl = currentEvent ? getValidUrl(currentEvent['可報名']) : null;
                 const videoUrl = currentEvent ? getValidUrl(currentEvent['Video Link']) : null;
 
+                // 💡 專家升級：產生 Google Calendar 無縫聯動網址
+                const getGCalLink = (event, dateStr) => {
+                    if (!event || !dateStr) return '#';
+                    const title = encodeURIComponent(event['活動標題'] || '教會活動');
+                    const details = encodeURIComponent(event['活動詳情'] || '詳情請見葵涌堂靈命塑造月曆');
+                    const d = new Date(dateStr);
+                    const format = (dt) => dt.toISOString().split('T')[0].replace(/-/g, '');
+                    const startStr = format(d);
+                    d.setDate(d.getDate() + 1); // Google Calendar 全天事件的結束日期必須是隔天
+                    const endStr = format(d);
+                    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}`;
+                };
+
+                // 💡 專家升級：現代化 Web Share API 一鍵分享
+                const handleNativeShare = async () => {
+                    let shareText = `來看看 ${selectedDate} 的內容吧！\n`;
+                    if (currentEvent) shareText += `⛪ ${currentEvent['活動標題']}\n`;
+                    if (hasBibleContent) shareText += `📖 讀經進度：${currentData['經卷']} ${currentData['章節'] || ''}\n`;
+                    
+                    const shareData = {
+                        title: SITE_CONFIG.titleLine2,
+                        text: shareText,
+                        url: window.location.href
+                    };
+
+                    if (navigator.share) {
+                        try {
+                            await navigator.share(shareData);
+                        } catch (err) {
+                            console.log("使用者取消分享");
+                        }
+                    } else {
+                        // 瀏覽器不支援時的智慧降級：複製到剪貼簿
+                        navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
+                        alert("分享內容已自動複製到您的剪貼簿！您可以直接貼上給朋友。");
+                    }
+                };
+
                 return (
                     <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
                         <div className="flex justify-between items-center mb-6">
                             <button onClick={()=>{ setView('calendar'); setShowAnswer(false); }} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
                             </button>
-                            <div className="text-gray-600 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">{selectedDate}</div>
+                            
+                            <div className="flex gap-2">
+                                <div className="text-gray-600 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 hidden md:block">
+                                    {selectedDate}
+                                </div>
+                                <button onClick={handleNativeShare} className="bg-nature-600 text-white px-4 py-2 rounded-full font-bold hover:bg-nature-700 shadow-sm flex items-center text-sm transition group">
+                                    <i className="fa-solid fa-share-nodes mr-2 group-hover:scale-110 transition-transform"></i> 分享
+                                </button>
+                            </div>
                         </div>
 
                         {currentEvent && (
                             <article className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
-                                <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden">
+                                <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden flex justify-between items-start">
                                      <i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i>
-                                     <div className="relative z-10">
+                                     <div className="relative z-10 pr-4">
                                          <div className="flex items-center space-x-2 text-blue-200 text-sm font-bold tracking-[0.2em] mb-3">
                                              <i className="fa-solid fa-calendar-star"></i>
                                              <span>教會動態速遞</span>
@@ -863,6 +935,10 @@
                                              {currentEvent['內頁標題'] || currentEvent['活動標題']}
                                          </h2>
                                      </div>
+                                     <a href={getGCalLink(currentEvent, selectedDate)} target="_blank" rel="noopener noreferrer" className="relative z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-2xl transition-all shadow-sm flex flex-col items-center justify-center shrink-0 border border-white/30 group" title="加入 Google 日曆">
+                                        <i className="fa-regular fa-calendar-plus text-2xl group-hover:scale-110 transition-transform"></i>
+                                        <span className="text-[10px] font-bold mt-1 tracking-wider hidden md:block">加入日曆</span>
+                                     </a>
                                 </div>
                                 
                                 {currentEvent['活動詳情'] && (
@@ -1105,7 +1181,6 @@
                         </div>
                     )}
 
-                    {/* 💡 專家視覺優化：深層底色 slate-200/70 */}
                     <main className="flex-grow py-8 px-4 w-full bg-slate-200/70">
                         {view === 'admin-dashboard' && userProfile?.role === 'admin' ? (
                             <AdminDashboard />
