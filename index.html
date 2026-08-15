@@ -118,7 +118,6 @@
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
 
-            // 💡 專家升級：深層連結路由導航器 (Deep Link Router)
             const goToCalendar = () => {
                 setView('calendar');
                 setShowAnswer(false);
@@ -191,7 +190,6 @@
                                 setCurrentUser(null);
                                 setUserProfile(null);
                                 setCompleted([]); 
-                                // 登出後若沒有特定日期，則返回日曆
                                 if (!new URLSearchParams(window.location.search).get('date')) goToCalendar();
                             }
                         });
@@ -212,7 +210,6 @@
             useEffect(() => {
                 const fetchSheetData = async () => {
                     try {
-                        // 取得網址列上的深層連結日期
                         const urlParams = new URLSearchParams(window.location.search);
                         const urlDate = urlParams.get('date');
 
@@ -223,7 +220,6 @@
                             setEventData(cached.events);
                             setValidDates(cached.datesArray);
                             
-                            // 💡 專家升級：若網址有指定的日期，直接閃現該內頁
                             if (urlDate && (cached.bible[urlDate] || cached.events[urlDate])) {
                                 setSelectedDate(urlDate);
                                 setView('reader');
@@ -891,7 +887,9 @@
                 };
 
                 const regUrl = currentEvent ? getValidUrl(currentEvent['可報名']) : null;
-                const videoUrl = currentEvent ? getValidUrl(currentEvent['Video Link']) : null;
+                // 💡 專家防呆：同時支援新舊欄位名稱，並優先使用 Media Link
+                const mediaLinkRaw = currentEvent ? (currentEvent['Media Link'] || currentEvent['Video Link']) : null;
+                const mediaUrl = getValidUrl(mediaLinkRaw);
 
                 const getGCalLink = (event, dateStr) => {
                     if (!event || !dateStr) return '#';
@@ -905,14 +903,13 @@
                     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}`;
                 };
 
-                // 💡 專家升級：支援 Deep Link 的原生社群分享
                 const handleNativeShare = async () => {
                     let shareText = `來看看 ${selectedDate} 的內容吧！\n`;
                     if (currentEvent) shareText += `⛪ ${currentEvent['活動標題']}\n`;
                     if (hasBibleContent) shareText += `📖 讀經進度：${currentData['經卷']} ${currentData['章節'] || ''}\n`;
                     
                     const baseUrl = window.location.origin + window.location.pathname;
-                    const shareUrl = `${baseUrl}?date=${selectedDate}`; // 產生專屬該日期的網址
+                    const shareUrl = `${baseUrl}?date=${selectedDate}`; 
                     
                     const shareData = {
                         title: SITE_CONFIG.titleLine2,
@@ -974,16 +971,17 @@
                                     </div>
                                 )}
                                 
-                                {(regUrl || videoUrl) && (
+                                {/* 💡 專家 UI 升級：泛用型的開啟相關資訊按鈕 */}
+                                {(regUrl || mediaUrl) && (
                                     <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
                                         {regUrl && (
                                             <a href={regUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg group">
                                                 <i className="fa-solid fa-pen-to-square mr-2 group-hover:scale-110 transition-transform"></i> 前往報名
                                             </a>
                                         )}
-                                        {videoUrl && (
-                                            <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
-                                                <i className="fa-brands fa-youtube mr-2 text-red-500 group-hover:scale-110 transition-transform"></i> 觀看宣傳片
+                                        {mediaUrl && (
+                                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
+                                                <i className="fa-solid fa-arrow-up-right-from-square mr-2 text-blue-500 group-hover:scale-110 transition-transform"></i> 開啟相關資訊
                                             </a>
                                         )}
                                     </div>
