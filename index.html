@@ -2,8 +2,24 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>葵涌堂靈命塑造月曆</title>
+    
+    <!-- 🖼️ 專家升級：Open Graph (WhatsApp / IG / FB 預覽圖設定) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="葵涌堂 靈命塑造月曆">
+    <meta property="og:description" content="同讀聖言行真道 · 聆聽聖靈活新生。立即查看每日讀經進度與教會最新動態！">
+    <!-- 💡 請將以下網址替換為教會真實的海報或高畫質照片網址 -->
+    <meta property="og:image" content="https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=1200&auto=format&fit=crop"> 
+    <meta property="og:url" content="https://您的網站真實網址.com/"> <!-- 💡 請替換為您的真實網址 -->
+
+    <!-- 📱 專家升級：PWA 手機桌面安裝設定 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#475569">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="靈命塑造">
+    <link rel="apple-touch-icon" href="icon-192.png">
     
     <link rel="stylesheet" href="style.css?v=5">
 
@@ -269,7 +285,6 @@
                         }
                         datesArray.sort();
                         
-                        // 💡 專家升級：支援一對多的陣列聚合 (Array Grouping)
                         const events = {};
                         if (eventResp && eventResp.ok) {
                             const eventText = await eventResp.text();
@@ -809,7 +824,6 @@
                                     const isPlan = validDates.includes(dateStr);
                                     const isDone = completed.includes(dateStr);
                                     
-                                    // 💡 專家升級：取得該日期的所有活動陣列
                                     const dayEvents = eventData[dateStr] || [];
                                     const hasEvent = dayEvents.length > 0;
                                     const hasContent = isPlan || hasEvent; 
@@ -839,7 +853,6 @@
                                             {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500 drop-shadow-sm"></i>}
                                             
                                             <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-[2px] px-0.5">
-                                                {/* 💡 專家升級：支援顯示多個微型標籤 */}
                                                 {hasEvent && dayEvents.slice(0, 2).map((evt, idx) => (
                                                     <div key={idx} className="w-full truncate px-1 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold shadow-sm bg-blue-100 text-blue-800 border border-blue-200">
                                                         <i className="fa-solid fa-bullhorn mr-1"></i>{evt['活動標題']}
@@ -866,7 +879,6 @@
 
             const renderReaderView = () => {
                 const currentData = data[selectedDate] || {};
-                // 💡 專家升級：獲取該日期的所有活動
                 const currentEvents = eventData[selectedDate] || [];
                 
                 const isPlan = validDates.includes(selectedDate);
@@ -956,7 +968,6 @@
                             </div>
                         </div>
 
-                        {/* 💡 專家升級：動態多重視圖渲染 (Multi-Card Rendering) */}
                         {currentEvents.map((evt, idx) => {
                             const regUrl = getValidUrl(evt['可報名']);
                             const mediaLinkRaw = evt['Media Link'] || evt['Video Link'];
@@ -1245,6 +1256,21 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+    </script>
+    
+    <!-- ⚙️ 專家升級：啟動 PWA Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('✅ PWA 引擎啟動成功');
+                    })
+                    .catch(err => {
+                        console.warn('❌ PWA 引擎啟動失敗: ', err);
+                    });
+            });
+        }
     </script>
 </body>
 </html>

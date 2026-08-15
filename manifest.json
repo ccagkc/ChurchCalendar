@@ -1,0 +1,24 @@
+{
+  "name": "葵涌堂 靈命塑造月曆",
+  "short_name": "靈命塑造",
+  "description": "同讀聖言行真道 · 聆聽聖靈活新生。葵涌堂專屬每日讀經與教會動態入口。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#475569",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
