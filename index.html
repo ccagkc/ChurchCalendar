@@ -3,22 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- 💡 專家提示：請在這裡修改網頁分頁顯示的「完整名稱」 -->
     <title>葵涌堂靈命塑造月曆</title>
     
-    <!-- 🖼️ 專家升級：Open Graph (WhatsApp / IG / FB 預覽圖設定) -->
+    <!-- 🖼️ Open Graph (WhatsApp / IG / FB 預覽圖設定) -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="葵涌堂 靈命塑造月曆">
     <meta property="og:description" content="同讀聖言行真道 · 聆聽聖靈活新生。立即查看每日讀經進度與教會最新動態！">
-    <!-- 💡 請將以下網址替換為教會真實的海報或高畫質照片網址 -->
     <meta property="og:image" content="https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=1200&auto=format&fit=crop"> 
-    <meta property="og:url" content="https://您的網站真實網址.com/"> <!-- 💡 請替換為您的真實網址 -->
+    <meta property="og:url" content="https://您的網站真實網址.com/">
 
-    <!-- 📱 專家升級：PWA 手機桌面安裝設定 -->
+    <!-- 📱 PWA 手機桌面安裝設定 -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#475569">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="葵涌堂閱曆">
+    
+    <!-- 💡 專家提示：請在這裡修改 Apple iOS 桌面圖示下方顯示的「短名稱」(建議 4~6 字) -->
+    <meta name="apple-mobile-web-app-title" content="靈命月曆">
     <link rel="apple-touch-icon" href="icon-192.png">
     
     <link rel="stylesheet" href="style.css?v=5">
@@ -1257,8 +1260,8 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
-    
-    <!-- ⚙️ 專家升級：啟動 PWA Service Worker -->
+
+    <!-- ⚙️ PWA 引擎啟動器 -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
