@@ -269,6 +269,7 @@
                         }
                         datesArray.sort();
                         
+                        // 💡 專家升級：支援一對多的陣列聚合 (Array Grouping)
                         const events = {};
                         if (eventResp && eventResp.ok) {
                             const eventText = await eventResp.text();
@@ -285,7 +286,8 @@
                                         const parts = dateStr.split('-');
                                         if (parts.length === 3) {
                                             const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                            events[stdDate] = item;
+                                            if (!events[stdDate]) events[stdDate] = [];
+                                            events[stdDate].push(item);
                                         }
                                     }
                                 }
@@ -806,11 +808,13 @@
                                     const dateStr = formatDate(dateObj);
                                     const isPlan = validDates.includes(dateStr);
                                     const isDone = completed.includes(dateStr);
-                                    const hasEvent = !!eventData[dateStr];
+                                    
+                                    // 💡 專家升級：取得該日期的所有活動陣列
+                                    const dayEvents = eventData[dateStr] || [];
+                                    const hasEvent = dayEvents.length > 0;
                                     const hasContent = isPlan || hasEvent; 
                                     
                                     const dayData = isPlan ? data[dateStr] : null;
-                                    const eventItem = hasEvent ? eventData[dateStr] : null;
                                     
                                     let btnClass = 'relative h-16 md:h-24 rounded-2xl flex flex-col items-center justify-center transition-all overflow-hidden ';
                                     
@@ -834,12 +838,17 @@
                                             <span className={`text-lg md:text-xl font-bold ${hasEvent && !isPlan ? 'text-blue-700' : ''}`}>{dateObj.getDate()}</span>
                                             {isDone && <i className="fa-solid fa-check-circle text-xs md:text-sm mt-1 absolute bottom-1 right-1 md:static md:mt-0 text-emerald-500 drop-shadow-sm"></i>}
                                             
-                                            <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-0.5 px-0.5">
-                                                {hasEvent && (
-                                                    <div className="w-full truncate px-1 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold shadow-sm bg-blue-100 text-blue-800 border border-blue-200">
-                                                        <i className="fa-solid fa-bullhorn mr-1"></i>{eventItem['活動標題']}
+                                            <div className="mt-auto pt-0.5 pb-1 relative z-10 w-full flex flex-col items-center gap-[2px] px-0.5">
+                                                {/* 💡 專家升級：支援顯示多個微型標籤 */}
+                                                {hasEvent && dayEvents.slice(0, 2).map((evt, idx) => (
+                                                    <div key={idx} className="w-full truncate px-1 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold shadow-sm bg-blue-100 text-blue-800 border border-blue-200">
+                                                        <i className="fa-solid fa-bullhorn mr-1"></i>{evt['活動標題']}
                                                     </div>
+                                                ))}
+                                                {dayEvents.length > 2 && (
+                                                    <div className="text-[7px] text-blue-500 font-bold leading-none my-[1px]">+{dayEvents.length - 2}</div>
                                                 )}
+
                                                 {isPlan && dayData && String(dayData['類別'] || '').trim() !== '' && (
                                                     <div className={`px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-sans font-bold tracking-wider shadow-sm transition-colors ${isDone ? 'bg-emerald-200/70 text-emerald-800' : 'bg-nature-200/60 text-nature-800'}`}>
                                                         {dayData['類別']}
@@ -857,7 +866,9 @@
 
             const renderReaderView = () => {
                 const currentData = data[selectedDate] || {};
-                const currentEvent = eventData[selectedDate] || null;
+                // 💡 專家升級：獲取該日期的所有活動
+                const currentEvents = eventData[selectedDate] || [];
+                
                 const isPlan = validDates.includes(selectedDate);
                 const isCompleted = completed.includes(selectedDate);
                 
@@ -886,11 +897,6 @@
                     return null;
                 };
 
-                const regUrl = currentEvent ? getValidUrl(currentEvent['可報名']) : null;
-                // 💡 專家防呆：同時支援新舊欄位名稱，並優先使用 Media Link
-                const mediaLinkRaw = currentEvent ? (currentEvent['Media Link'] || currentEvent['Video Link']) : null;
-                const mediaUrl = getValidUrl(mediaLinkRaw);
-
                 const getGCalLink = (event, dateStr) => {
                     if (!event || !dateStr) return '#';
                     const title = encodeURIComponent(event['活動標題'] || '教會活動');
@@ -905,7 +911,11 @@
 
                 const handleNativeShare = async () => {
                     let shareText = `來看看 ${selectedDate} 的內容吧！\n`;
-                    if (currentEvent) shareText += `⛪ ${currentEvent['活動標題']}\n`;
+                    if (currentEvents.length > 0) {
+                        currentEvents.forEach(evt => {
+                            shareText += `⛪ ${evt['活動標題']}\n`;
+                        });
+                    }
                     if (hasBibleContent) shareText += `📖 讀經進度：${currentData['經卷']} ${currentData['章節'] || ''}\n`;
                     
                     const baseUrl = window.location.origin + window.location.pathname;
@@ -946,48 +956,54 @@
                             </div>
                         </div>
 
-                        {currentEvent && (
-                            <article className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
-                                <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden flex justify-between items-start">
-                                     <i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i>
-                                     <div className="relative z-10 pr-4">
-                                         <div className="flex items-center space-x-2 text-blue-200 text-sm font-bold tracking-[0.2em] mb-3">
-                                             <i className="fa-solid fa-calendar-star"></i>
-                                             <span>教會動態速遞</span>
+                        {/* 💡 專家升級：動態多重視圖渲染 (Multi-Card Rendering) */}
+                        {currentEvents.map((evt, idx) => {
+                            const regUrl = getValidUrl(evt['可報名']);
+                            const mediaLinkRaw = evt['Media Link'] || evt['Video Link'];
+                            const mediaUrl = getValidUrl(mediaLinkRaw);
+
+                            return (
+                                <article key={idx} className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
+                                    <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden flex justify-between items-start">
+                                         <i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i>
+                                         <div className="relative z-10 pr-4">
+                                             <div className="flex items-center space-x-2 text-blue-200 text-sm font-bold tracking-[0.2em] mb-3">
+                                                 <i className="fa-solid fa-calendar-star"></i>
+                                                 <span>教會動態速遞 {currentEvents.length > 1 ? `(${idx + 1}/${currentEvents.length})` : ''}</span>
+                                             </div>
+                                             <h2 className="text-3xl md:text-4xl font-sans font-bold leading-tight">
+                                                 {evt['內頁標題'] || evt['活動標題']}
+                                             </h2>
                                          </div>
-                                         <h2 className="text-3xl md:text-4xl font-sans font-bold leading-tight">
-                                             {currentEvent['內頁標題'] || currentEvent['活動標題']}
-                                         </h2>
-                                     </div>
-                                     <a href={getGCalLink(currentEvent, selectedDate)} target="_blank" rel="noopener noreferrer" className="relative z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-2xl transition-all shadow-sm flex flex-col items-center justify-center shrink-0 border border-white/30 group" title="加入 Google 日曆">
-                                        <i className="fa-regular fa-calendar-plus text-2xl group-hover:scale-110 transition-transform"></i>
-                                        <span className="text-[10px] font-bold mt-1 tracking-wider hidden md:block">加入日曆</span>
-                                     </a>
-                                </div>
-                                
-                                {currentEvent['活動詳情'] && (
-                                    <div className="p-6 md:p-10 text-gray-700 leading-loose text-lg whitespace-pre-wrap font-sans border-b border-gray-100">
-                                        {currentEvent['活動詳情']}
+                                         <a href={getGCalLink(evt, selectedDate)} target="_blank" rel="noopener noreferrer" className="relative z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-2xl transition-all shadow-sm flex flex-col items-center justify-center shrink-0 border border-white/30 group" title="加入 Google 日曆">
+                                            <i className="fa-regular fa-calendar-plus text-2xl group-hover:scale-110 transition-transform"></i>
+                                            <span className="text-[10px] font-bold mt-1 tracking-wider hidden md:block">加入日曆</span>
+                                         </a>
                                     </div>
-                                )}
-                                
-                                {/* 💡 專家 UI 升級：泛用型的開啟相關資訊按鈕 */}
-                                {(regUrl || mediaUrl) && (
-                                    <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
-                                        {regUrl && (
-                                            <a href={regUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg group">
-                                                <i className="fa-solid fa-pen-to-square mr-2 group-hover:scale-110 transition-transform"></i> 前往報名
-                                            </a>
-                                        )}
-                                        {mediaUrl && (
-                                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
-                                                <i className="fa-solid fa-arrow-up-right-from-square mr-2 text-blue-500 group-hover:scale-110 transition-transform"></i> 開啟相關資訊
-                                            </a>
-                                        )}
-                                    </div>
-                                )}
-                            </article>
-                        )}
+                                    
+                                    {evt['活動詳情'] && (
+                                        <div className="p-6 md:p-10 text-gray-700 leading-loose text-lg whitespace-pre-wrap font-sans border-b border-gray-100">
+                                            {evt['活動詳情']}
+                                        </div>
+                                    )}
+                                    
+                                    {(regUrl || mediaUrl) && (
+                                        <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
+                                            {regUrl && (
+                                                <a href={regUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg group">
+                                                    <i className="fa-solid fa-pen-to-square mr-2 group-hover:scale-110 transition-transform"></i> 前往報名
+                                                </a>
+                                            )}
+                                            {mediaUrl && (
+                                                <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
+                                                    <i className="fa-solid fa-arrow-up-right-from-square mr-2 text-blue-500 group-hover:scale-110 transition-transform"></i> 開啟相關資訊
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })}
 
                         {hasBibleContent && (
                             <article className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden mb-8">
