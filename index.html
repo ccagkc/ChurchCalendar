@@ -51,7 +51,7 @@
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "kc-church-bible-progress-v3",
-            cacheKey: "kc-church-data-cache-v1", // 💡 新增：SWR 資料快取 Key
+            cacheKey: "kc-church-data-cache-v1",
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
         };
@@ -118,7 +118,22 @@
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
 
-            // 初始化 Firebase
+            // 💡 專家升級：深層連結路由導航器 (Deep Link Router)
+            const goToCalendar = () => {
+                setView('calendar');
+                setShowAnswer(false);
+                window.scrollTo(0,0);
+                window.history.replaceState(null, '', window.location.pathname);
+            };
+
+            const goToDate = (dateStr) => {
+                setSelectedDate(dateStr);
+                setView('reader');
+                setShowAnswer(false);
+                window.scrollTo(0,0);
+                window.history.replaceState(null, '', `?date=${dateStr}`);
+            };
+
             useEffect(() => {
                 let unsubscribeAuth = null;
                 const initFirebase = async () => {
@@ -155,7 +170,9 @@
                 
                             if (user) {
                                 setCurrentUser(user);
-                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') setView('admin-dashboard');
+                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') {
+                                    setView('admin-dashboard');
+                                }
                                 
                                 const profileRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
                                 unsubscribeProfile.current = dbModule.onSnapshot(profileRef, (snap) => {
@@ -174,7 +191,8 @@
                                 setCurrentUser(null);
                                 setUserProfile(null);
                                 setCompleted([]); 
-                                setView('calendar'); 
+                                // 登出後若沒有特定日期，則返回日曆
+                                if (!new URLSearchParams(window.location.search).get('date')) goToCalendar();
                             }
                         });
                     } catch (e) {
@@ -191,22 +209,32 @@
                 };
             }, []);
 
-            // 💡 專家級：SWR 快取架構與背景同步資料
             useEffect(() => {
                 const fetchSheetData = async () => {
                     try {
-                        // 1. 先嘗試從本機 LocalStorage 載入資料 (實現 0 秒閃電渲染)
+                        // 取得網址列上的深層連結日期
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const urlDate = urlParams.get('date');
+
                         const cachedDataStr = localStorage.getItem(SITE_CONFIG.cacheKey);
                         if (cachedDataStr) {
                             const cached = JSON.parse(cachedDataStr);
                             setData(cached.bible);
                             setEventData(cached.events);
                             setValidDates(cached.datesArray);
-                            initViewMonth(cached.datesArray, cached.bible);
-                            setLoading(false); // 隱藏載入畫面，讓用戶立刻開始使用
+                            
+                            // 💡 專家升級：若網址有指定的日期，直接閃現該內頁
+                            if (urlDate && (cached.bible[urlDate] || cached.events[urlDate])) {
+                                setSelectedDate(urlDate);
+                                setView('reader');
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                            } else {
+                                initViewMonth(cached.datesArray, cached.bible);
+                            }
+                            setLoading(false); 
                         }
 
-                        // 2. 在背景重新抓取最新資料 (平行非同步)
                         const bibleUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
                         const eventUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.EVENT_SHEET_NAME)}`;
 
@@ -217,7 +245,7 @@
 
                         if (!bibleResp.ok) {
                             if (!cachedDataStr) throw new Error("無法連接到讀經資料庫。請確認已發佈到網路。");
-                            return; // 若有快取但斷網，則繼續使用快取
+                            return; 
                         }
                         
                         const bibleText = await bibleResp.text();
@@ -267,15 +295,21 @@
                                 }
                             }
                         }
-
-                        // 3. 更新畫面與本機快取
+                        
                         setData(items);
                         setEventData(events);
                         setValidDates(datesArray);
                         localStorage.setItem(SITE_CONFIG.cacheKey, JSON.stringify({ bible: items, events: events, datesArray: datesArray }));
                         
                         if (!cachedDataStr) {
-                            initViewMonth(datesArray, items);
+                            if (urlDate && (items[urlDate] || events[urlDate])) {
+                                setSelectedDate(urlDate);
+                                setView('reader');
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                            } else {
+                                initViewMonth(datesArray, items);
+                            }
                         }
                         setLoading(false);
 
@@ -439,13 +473,13 @@
                 const [password, setPassword] = useState('');
                 const [isRegister, setIsRegister] = useState(false);
                 const [errorMsg, setErrorMsg] = useState('');
-                const [authLoading, setAuthLoading] = useState(false);
+                const [loading, setLoading] = useState(false);
 
                 if (!showAdminLogin) return null;
 
                 const handleAdminAuth = async (e) => {
                     e.preventDefault();
-                    setAuthLoading(true);
+                    setLoading(true);
                     setErrorMsg('');
                     const adminEmail = `admin${SITE_CONFIG.adminEmailDomain}`;
                     
@@ -473,7 +507,7 @@
                             setErrorMsg(err.message);
                         }
                     } finally {
-                        setAuthLoading(false);
+                        setLoading(false);
                     }
                 };
 
@@ -497,8 +531,8 @@
                                     <label htmlFor="regAdmin" className="text-xs text-gray-500 cursor-pointer hover:text-gray-700 transition">首次使用 (建立管理員密碼)</label>
                                 </div>
                                 
-                                <button type="submit" disabled={authLoading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
-                                    {authLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
+                                <button type="submit" disabled={loading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
+                                    {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
                                 </button>
                             </form>
                         </div>
@@ -601,7 +635,7 @@
                                 <h2 className="text-2xl font-bold font-serif mb-1"><i className="fa-solid fa-server mr-2 text-nature-400"></i> 教會讀經後台系統</h2>
                                 <p className="text-gray-400 text-sm">管理員：{userProfile?.username}</p>
                             </div>
-                            <button onClick={() => setView('calendar')} className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition font-bold border border-gray-700">
+                            <button onClick={goToCalendar} className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition font-bold border border-gray-700">
                                 返回前台
                             </button>
                         </div>
@@ -734,10 +768,7 @@
                         }
                         const parts = targetDate.split('-');
                         setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
-                        setSelectedDate(targetDate);
-                        setView('reader');
-                        setShowAnswer(false);
-                        window.scrollTo(0,0);
+                        goToDate(targetDate);
                     }
                 };
 
@@ -801,12 +832,7 @@
                                         <button 
                                             key={dateStr}
                                             disabled={!hasContent}
-                                            onClick={() => { 
-                                                setSelectedDate(dateStr); 
-                                                setView('reader'); 
-                                                setShowAnswer(false); 
-                                                window.scrollTo(0,0);
-                                            }}
+                                            onClick={() => goToDate(dateStr)}
                                             className={btnClass}
                                         >
                                             <span className={`text-lg md:text-xl font-bold ${hasEvent && !isPlan ? 'text-blue-700' : ''}`}>{dateObj.getDate()}</span>
@@ -867,7 +893,6 @@
                 const regUrl = currentEvent ? getValidUrl(currentEvent['可報名']) : null;
                 const videoUrl = currentEvent ? getValidUrl(currentEvent['Video Link']) : null;
 
-                // 💡 專家升級：產生 Google Calendar 無縫聯動網址
                 const getGCalLink = (event, dateStr) => {
                     if (!event || !dateStr) return '#';
                     const title = encodeURIComponent(event['活動標題'] || '教會活動');
@@ -875,21 +900,24 @@
                     const d = new Date(dateStr);
                     const format = (dt) => dt.toISOString().split('T')[0].replace(/-/g, '');
                     const startStr = format(d);
-                    d.setDate(d.getDate() + 1); // Google Calendar 全天事件的結束日期必須是隔天
+                    d.setDate(d.getDate() + 1); 
                     const endStr = format(d);
                     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}`;
                 };
 
-                // 💡 專家升級：現代化 Web Share API 一鍵分享
+                // 💡 專家升級：支援 Deep Link 的原生社群分享
                 const handleNativeShare = async () => {
                     let shareText = `來看看 ${selectedDate} 的內容吧！\n`;
                     if (currentEvent) shareText += `⛪ ${currentEvent['活動標題']}\n`;
                     if (hasBibleContent) shareText += `📖 讀經進度：${currentData['經卷']} ${currentData['章節'] || ''}\n`;
                     
+                    const baseUrl = window.location.origin + window.location.pathname;
+                    const shareUrl = `${baseUrl}?date=${selectedDate}`; // 產生專屬該日期的網址
+                    
                     const shareData = {
                         title: SITE_CONFIG.titleLine2,
                         text: shareText,
-                        url: window.location.href
+                        url: shareUrl
                     };
 
                     if (navigator.share) {
@@ -899,16 +927,15 @@
                             console.log("使用者取消分享");
                         }
                     } else {
-                        // 瀏覽器不支援時的智慧降級：複製到剪貼簿
                         navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
-                        alert("分享內容已自動複製到您的剪貼簿！您可以直接貼上給朋友。");
+                        alert("分享連結已自動複製到您的剪貼簿！您可以直接貼上給朋友。");
                     }
                 };
 
                 return (
                     <div className="max-w-3xl mx-auto w-full pb-10 animate-fade-in">
                         <div className="flex justify-between items-center mb-6">
-                            <button onClick={()=>{ setView('calendar'); setShowAnswer(false); }} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
+                            <button onClick={goToCalendar} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
                             </button>
                             
@@ -1091,14 +1118,14 @@
                             <div className="flex gap-2">
                                 <button 
                                      disabled={currentIndex <= 0} 
-                                     onClick={() => { setSelectedDate(allContentDates[currentIndex - 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                     onClick={() => goToDate(allContentDates[currentIndex - 1])} 
                                      className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md flex items-center justify-center font-bold transition hover:bg-slate-50"
                                 >
                                     <i className="fa-solid fa-arrow-left md:mr-2"></i> <span className="hidden md:inline">前一項</span>
                                 </button>
                                 <button 
                                     disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} 
-                                    onClick={() => { setSelectedDate(allContentDates[currentIndex + 1]); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                    onClick={() => goToDate(allContentDates[currentIndex + 1])} 
                                     className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md flex items-center justify-center font-bold transition hover:bg-slate-50"
                                 >
                                     <span className="hidden md:inline">下一項</span> <i className="fa-solid fa-arrow-right md:ml-2"></i>
@@ -1108,7 +1135,7 @@
 
                         <div className="flex justify-center mb-16">
                             <button 
-                                onClick={()=>{ setView('calendar'); setShowAnswer(false); window.scrollTo(0,0); }} 
+                                onClick={goToCalendar} 
                                 className="w-full md:w-auto px-10 py-4 bg-slate-800 text-white rounded-2xl shadow-lg hover:bg-slate-700 font-bold flex items-center justify-center transition-all group active:scale-95"
                             >
                                 <i className="fa-solid fa-house mr-3 group-hover:scale-110 transition-transform"></i> 
@@ -1134,7 +1161,7 @@
                     <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
                         <div className="max-w-5xl mx-auto px-4 py-4 md:py-5 flex justify-between items-center gap-2">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={()=>setView('calendar')}><i className="fa-solid fa-cross text-xl"></i></div>
+                                <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={goToCalendar}><i className="fa-solid fa-cross text-xl"></i></div>
                                 <div><h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
                             </div>
                             
@@ -1154,7 +1181,7 @@
                                                     setCompleted([]); 
                                                     setCurrentUser(null);
                                                     setUserProfile(null);
-                                                    setView('calendar'); 
+                                                    goToCalendar();
                                                     fb.authModule.signOut(fb.auth); 
                                                 }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
                                             </div>
