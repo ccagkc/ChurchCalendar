@@ -4,23 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <!-- 💡 已更新：網頁分頁顯示的完整名稱 -->
     <title>葵涌堂閱曆</title>
     
-    <!-- 🖼️ Open Graph (WhatsApp / IG / FB 預覽圖設定) -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="葵涌堂閱曆">
     <meta property="og:description" content="同讀聖言行真道 · 聆聽聖靈活新生。立即查看每日讀經進度與教會最新動態！">
     <meta property="og:image" content="https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=1200&auto=format&fit=crop"> 
     <meta property="og:url" content="https://您的網站真實網址.com/">
 
-    <!-- 📱 PWA 手機桌面安裝設定 -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#475569">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
-    <!-- 💡 已確認：Apple iOS 桌面圖示下方顯示的短名稱 -->
     <meta name="apple-mobile-web-app-title" content="葵涌堂閱曆">
     <link rel="apple-touch-icon" href="icon-192.png">
     
@@ -79,7 +74,8 @@
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "kc-church-bible-progress-v3",
-            cacheKey: "kc-church-data-cache-v1",
+            // 💡 專家升級：快取版本升級為 v2，強制用戶抓取最新的圖片結構
+            cacheKey: "kc-church-data-cache-v2",
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
         };
@@ -1018,16 +1014,23 @@
                     return null;
                 };
 
+                // 💡 專家升級：解析 Image Link 為 Google Thumbnail API 直連圖片
                 const getImageUrl = (str) => {
                     if (!str) return null;
                     let url = String(str).trim();
                     if (!url.startsWith('http')) return null;
                     
-                    if (url.includes('drive.google.com/file/d/') || url.includes('drive.google.com/open')) {
-                        const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-                        if (idMatch) {
-                            return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
-                        }
+                    let fileId = null;
+                    if (url.includes('drive.google.com/file/d/')) {
+                        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                        if (match) fileId = match[1];
+                    } else if (url.includes('drive.google.com/open') || url.includes('drive.google.com/uc')) {
+                        const match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                        if (match) fileId = match[1];
+                    }
+
+                    if (fileId) {
+                        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
                     }
                     return url;
                 };
@@ -1095,8 +1098,9 @@
                             const regUrl = getValidUrl(evt['可報名']);
                             const mediaLinkRaw = evt['Media Link'] || evt['Video Link'];
                             const mediaUrl = getValidUrl(mediaLinkRaw);
-                            // 💡 專家升級：解析 Image Link 欄位 (並維持向後相容)
-                            const imageUrlRaw = evt['Image Link'] || evt['Image'] || evt['圖片'];
+                            
+                            // 💡 專家容錯處理：擷取新舊命名與不同大小寫的 Image Link 欄位
+                            const imageUrlRaw = evt['Image Link'] || evt['Image'] || evt['圖片'] || evt['image link'];
                             const imageUrl = getImageUrl(imageUrlRaw);
 
                             return (
@@ -1118,6 +1122,7 @@
                                          </a>
                                     </div>
                                     
+                                    {/* 🖼️ 專家升級：支援破圖隱藏防呆設計 */}
                                     {imageUrl && (
                                         <div className="px-6 md:px-10 pt-6 md:pt-8 pb-2">
                                             <img 
@@ -1125,6 +1130,10 @@
                                                 alt={evt['活動標題'] || "活動宣傳圖片"} 
                                                 className="w-full h-auto object-contain rounded-2xl shadow-md border border-slate-100 bg-slate-50"
                                                 loading="lazy"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.style.display = 'none';
+                                                }}
                                             />
                                         </div>
                                     )}
