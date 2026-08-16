@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <!-- 💡 專家提示：請在這裡修改網頁分頁顯示的「完整名稱」 -->
-    <title>葵涌堂靈命塑造月曆</title>
+    <!-- 💡 已更新：網頁分頁顯示的完整名稱 -->
+    <title>葵涌堂閱曆</title>
     
     <!-- 🖼️ Open Graph (WhatsApp / IG / FB 預覽圖設定) -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="葵涌堂 靈命塑造月曆">
+    <meta property="og:title" content="葵涌堂閱曆">
     <meta property="og:description" content="同讀聖言行真道 · 聆聽聖靈活新生。立即查看每日讀經進度與教會最新動態！">
     <meta property="og:image" content="https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=1200&auto=format&fit=crop"> 
     <meta property="og:url" content="https://您的網站真實網址.com/">
@@ -20,7 +20,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
-    <!-- 💡 專家提示：請在這裡修改 Apple iOS 桌面圖示下方顯示的「短名稱」(建議 4~6 字) -->
+    <!-- 💡 已確認：Apple iOS 桌面圖示下方顯示的短名稱 -->
     <meta name="apple-mobile-web-app-title" content="葵涌堂閱曆">
     <link rel="apple-touch-icon" href="icon-192.png">
     
@@ -43,7 +43,16 @@
                             600: 'var(--theme-600)', 700: 'var(--theme-700)', 800: 'var(--theme-800)', 900: 'var(--theme-900)'
                         }
                     },
-                    boxShadow: { 'soft': '0 10px 40px -10px rgba(0,0,0,0.05)' }
+                    boxShadow: { 'soft': '0 10px 40px -10px rgba(0,0,0,0.05)' },
+                    animation: {
+                        'slide-up': 'slideUp 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(100%)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
                 }
             }
         }
@@ -65,7 +74,7 @@
             SHEET_NAME: 'ReadBible',
             EVENT_SHEET_NAME: 'Event', 
             titleLine1: "剛強壯膽 · 踐信力行",
-            titleLine2: "葵涌堂 靈命塑造月曆", 
+            titleLine2: "葵涌堂閱曆", 
             subtitle: "神的話語是我們腳前的燈、路上的光",
             description: "同讀聖言行真道 · 聆聽聖靈活新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
@@ -133,6 +142,11 @@
             const [showAdminLogin, setShowAdminLogin] = useState(false);
             const [syncing, setSyncing] = useState(false);
 
+            const [deferredPrompt, setDeferredPrompt] = useState(null);
+            const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+            const [isIOS, setIsIOS] = useState(false);
+            const [isStandalone, setIsStandalone] = useState(false);
+
             let unsubscribeProgress = useRef(null);
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
@@ -150,6 +164,55 @@
                 setShowAnswer(false);
                 window.scrollTo(0,0);
                 window.history.replaceState(null, '', `?date=${dateStr}`);
+            };
+
+            useEffect(() => {
+                const isAppMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+                setIsStandalone(isAppMode);
+
+                if (isAppMode) return;
+
+                const userAgent = window.navigator.userAgent.toLowerCase();
+                const isAppleDevice = /iphone|ipad|ipod/.test(userAgent);
+                setIsIOS(isAppleDevice);
+
+                const dismissed = localStorage.getItem('pwa_prompt_dismissed') === 'true';
+
+                const handleBeforeInstallPrompt = (e) => {
+                    e.preventDefault(); 
+                    setDeferredPrompt(e); 
+                    
+                    if (!dismissed) {
+                        setTimeout(() => setShowInstallPrompt(true), 2000);
+                    }
+                };
+
+                window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+                if (isAppleDevice && !dismissed) {
+                     setTimeout(() => setShowInstallPrompt(true), 2000);
+                }
+
+                return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+            }, []);
+
+            const handleInstallClick = async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`用戶安裝選擇: ${outcome}`);
+                    setDeferredPrompt(null);
+                    setShowInstallPrompt(false);
+                }
+            };
+
+            const handleDismissInstall = () => {
+                localStorage.setItem('pwa_prompt_dismissed', 'true');
+                setShowInstallPrompt(false);
+            };
+
+            const forceShowInstall = () => {
+                setShowInstallPrompt(true);
             };
 
             useEffect(() => {
@@ -747,6 +810,49 @@
                 </div>
             );
 
+            const InstallPromptModal = () => {
+                if (!showInstallPrompt || isStandalone) return null;
+
+                return (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+                        <div className="bg-white w-full sm:max-w-md rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden animate-slide-up pb-8 sm:pb-0">
+                            <div className="p-6 md:p-8 text-center relative">
+                                <button onClick={handleDismissInstall} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full transition">
+                                    <i className="fa-solid fa-xmark"></i>
+                                </button>
+                                
+                                <div className="w-16 h-16 bg-nature-100 text-nature-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">
+                                    <i className="fa-solid fa-mobile-screen"></i>
+                                </div>
+                                <h2 className="text-2xl font-bold font-serif text-slate-800 mb-2">安裝葵涌堂閱曆 App</h2>
+                                <p className="text-gray-500 mb-6 text-sm">為了獲得流暢的全螢幕體驗與離線讀取功能，建議您將閱曆加入手機桌面。</p>
+                                
+                                {isIOS ? (
+                                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-left text-sm text-blue-800 mb-6 shadow-sm">
+                                        <p className="font-bold mb-2 flex items-center"><i className="fa-brands fa-apple mr-2 text-lg"></i>蘋果手機安裝步驟：</p>
+                                        <ol className="list-decimal list-inside space-y-2 pl-2">
+                                            <li>點擊螢幕下方的 <i className="fa-solid fa-arrow-up-from-bracket mx-1 text-blue-500"></i> 分享圖示</li>
+                                            <li>向下滑動，選擇 <strong>「加至主畫面」</strong> ➕</li>
+                                        </ol>
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={handleInstallClick} 
+                                        className="w-full bg-nature-600 hover:bg-nature-700 text-white font-bold py-4 rounded-xl transition-all shadow-md active:scale-95 text-lg mb-3"
+                                    >
+                                        <i className="fa-solid fa-download mr-2"></i> 一鍵安裝至手機
+                                    </button>
+                                )}
+                                
+                                <button onClick={handleDismissInstall} className="text-gray-400 text-sm font-medium hover:text-gray-600 py-2">
+                                    暫時不要，使用網頁版就好
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             const renderCalendarView = () => {
                 const year = currentViewMonth.getFullYear();
                 const month = currentViewMonth.getMonth();
@@ -912,10 +1018,24 @@
                     return null;
                 };
 
+                const getImageUrl = (str) => {
+                    if (!str) return null;
+                    let url = String(str).trim();
+                    if (!url.startsWith('http')) return null;
+                    
+                    if (url.includes('drive.google.com/file/d/') || url.includes('drive.google.com/open')) {
+                        const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                        if (idMatch) {
+                            return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
+                        }
+                    }
+                    return url;
+                };
+
                 const getGCalLink = (event, dateStr) => {
                     if (!event || !dateStr) return '#';
                     const title = encodeURIComponent(event['活動標題'] || '教會活動');
-                    const details = encodeURIComponent(event['活動詳情'] || '詳情請見葵涌堂靈命塑造月曆');
+                    const details = encodeURIComponent(event['活動詳情'] || '詳情請見葵涌堂閱曆');
                     const d = new Date(dateStr);
                     const format = (dt) => dt.toISOString().split('T')[0].replace(/-/g, '');
                     const startStr = format(d);
@@ -975,6 +1095,9 @@
                             const regUrl = getValidUrl(evt['可報名']);
                             const mediaLinkRaw = evt['Media Link'] || evt['Video Link'];
                             const mediaUrl = getValidUrl(mediaLinkRaw);
+                            // 💡 專家升級：解析 Image Link 欄位 (並維持向後相容)
+                            const imageUrlRaw = evt['Image Link'] || evt['Image'] || evt['圖片'];
+                            const imageUrl = getImageUrl(imageUrlRaw);
 
                             return (
                                 <article key={idx} className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
@@ -995,8 +1118,19 @@
                                          </a>
                                     </div>
                                     
+                                    {imageUrl && (
+                                        <div className="px-6 md:px-10 pt-6 md:pt-8 pb-2">
+                                            <img 
+                                                src={imageUrl} 
+                                                alt={evt['活動標題'] || "活動宣傳圖片"} 
+                                                className="w-full h-auto object-contain rounded-2xl shadow-md border border-slate-100 bg-slate-50"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                    )}
+
                                     {evt['活動詳情'] && (
-                                        <div className="p-6 md:p-10 text-gray-700 leading-loose text-lg whitespace-pre-wrap font-sans border-b border-gray-100">
+                                        <div className={`px-6 md:px-10 text-gray-700 leading-loose text-lg whitespace-pre-wrap font-sans border-b border-gray-100 ${imageUrl ? 'pb-6 md:pb-10 pt-4' : 'p-6 md:p-10'}`}>
                                             {evt['活動詳情']}
                                         </div>
                                     )}
@@ -1186,6 +1320,8 @@
                 <>
                     <AuthModal />
                     <AdminLoginModal />
+                    <InstallPromptModal /> 
+                    
                     <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
                         <div className="max-w-5xl mx-auto px-4 py-4 md:py-5 flex justify-between items-center gap-2">
                             <div className="flex items-center gap-3">
@@ -1246,12 +1382,19 @@
                         )}
                     </main>
 
-                    <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 text-[10px] tracking-widest uppercase mt-auto">
-                        <p className="mb-2 text-slate-300"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
-                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition">
+                    <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 tracking-widest mt-auto">
+                        <p className="mb-2 text-slate-300 text-xs uppercase"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
+                        
+                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition text-[10px] uppercase mb-6">
                             <p>{SITE_CONFIG.footerText}</p>
                             {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
                         </div>
+
+                        {!isStandalone && (
+                            <button onClick={forceShowInstall} className="inline-flex items-center text-slate-400 hover:text-white text-xs border border-slate-600 hover:border-slate-500 rounded-full px-4 py-2 transition-all">
+                                <i className="fa-solid fa-mobile-screen-button mr-2"></i> 將「葵涌堂閱曆」安裝至手機桌面
+                            </button>
+                        )}
                     </footer>
                 </>
             );
@@ -1260,8 +1403,7 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
-
-    <!-- ⚙️ PWA 引擎啟動器 -->
+    
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
