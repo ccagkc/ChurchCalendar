@@ -778,7 +778,7 @@
                 </div>
             );
 
-            // 💡 專家升級：Google Calendar 風格網格渲染
+            // 💡 專家升級：Google Calendar 極簡版網格渲染
             const renderCalendarView = () => {
                 const year = currentViewMonth.getFullYear();
                 const month = currentViewMonth.getMonth();
@@ -866,8 +866,8 @@
                                     
                                     const dayData = isPlan ? data[dateStr] : null;
                                     
-                                    // 💡 專家升級：拉高儲存格高度 (h-[4.5rem]) 並微調 padding 讓文字能緊密排列
-                                    let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-1 transition-all overflow-hidden ';
+                                    // 💡 專家升級：壓縮格內邊距 (p-0.5) 讓文字能緊密排列
+                                    let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
                                     
                                     if (!hasContent) {
                                         btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
@@ -892,11 +892,10 @@
                                                 {isDone && <i className="fa-solid fa-check-circle text-[9px] md:text-xs text-emerald-500 absolute right-0"></i>}
                                             </div>
                                             
-                                            {/* 💡 專家升級：極簡靠左對齊的資訊流 (Google Calendar 風格) */}
+                                            {/* 💡 專家升級：極簡窄邊條 (Border-left) 與靠左對齊的資訊流 */}
                                             <div className="w-full flex flex-col gap-[2px] overflow-hidden">
                                                 {hasEvent && dayEvents.slice(0, 2).map((evt, idx) => (
-                                                    <div key={idx} className="w-full truncate px-1 py-[1.5px] rounded-[3px] text-[8px] md:text-[10px] font-sans font-medium bg-blue-50 text-blue-700 text-left tracking-tight border border-blue-100">
-                                                        <span className="inline-block w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-blue-500 mr-1 align-middle"></span>
+                                                    <div key={idx} className="w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium bg-blue-50 text-blue-700 text-left tracking-tight border-l-[3px] border-l-blue-500">
                                                         {evt['活動標題']}
                                                     </div>
                                                 ))}
@@ -905,8 +904,7 @@
                                                 )}
 
                                                 {isPlan && dayData && String(dayData['類別'] || '').trim() !== '' && (
-                                                    <div className={`w-full truncate px-1 py-[1.5px] rounded-[3px] text-[8px] md:text-[10px] font-sans font-medium text-left tracking-tight border ${isDone ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-nature-50 text-nature-700 border-nature-100'}`}>
-                                                        <span className={`inline-block w-1 h-1 md:w-1.5 md:h-1.5 rounded-full mr-1 align-middle ${isDone ? 'bg-emerald-500' : 'bg-nature-500'}`}></span>
+                                                    <div className={`w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium text-left tracking-tight border-l-[3px] ${isDone ? 'bg-emerald-50 text-emerald-700 border-l-emerald-500' : 'bg-nature-50 text-nature-700 border-l-nature-500'}`}>
                                                         {dayData['類別']}
                                                     </div>
                                                 )}
