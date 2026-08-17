@@ -78,8 +78,9 @@
             subtitle: "你要盡心盡性盡意盡力愛主你的神, 其次就是愛人與己",
             description: "同讀聖言行神所悅 · 聆聽聖靈活主新生",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
-            storageKey: "kc-church-bible-progress-v3",
-            cacheKey: "kc-church-data-cache-v2",
+            // 💡 專家升級：強制更新快取鍵值，隔離新舊資料庫狀態
+            storageKey: "ccagkc-calendar-progress-v1",
+            cacheKey: "ccagkc-calendar-cache-v1",
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
         };
@@ -204,7 +205,9 @@
                         const app = appModule.initializeApp(firebaseConfig);
                         const auth = authModule.getAuth(app);
                         const db = dbModule.getFirestore(app);
-                        const appId = 'kcc-bible-app'; 
+                        
+                        // 💡 專家升級：將應用程式命名空間完美對齊您的新設定
+                        const appId = 'ccagkc-ChurchCalendarApp'; 
                 
                         setFb({ auth, db, appId, authModule, dbModule });
                 
@@ -778,7 +781,6 @@
                 </div>
             );
 
-            // 💡 專家升級：Google Calendar 極簡版網格渲染
             const renderCalendarView = () => {
                 const year = currentViewMonth.getFullYear();
                 const month = currentViewMonth.getMonth();
@@ -849,7 +851,6 @@
                             <div className="bg-nature-600 text-white py-3 text-center font-bold text-lg tracking-widest hidden md:block rounded-t-[2.2rem] mx-[-4px] mt-[-4px] mb-2">
                                 {year}年 {month + 1}月
                             </div>
-                            {/* 💡 專家升級：縮小 gap 以釋放儲存格空間 */}
                             <div className="p-2 md:p-6 grid grid-cols-7 gap-1 md:gap-3">
                                 {['日','一','二','三','四','五','六'].map(d => <div key={d} className="text-center text-slate-500 text-xs md:text-sm font-bold py-2 uppercase">{d}</div>)}
                                 
@@ -866,7 +867,6 @@
                                     
                                     const dayData = isPlan ? data[dateStr] : null;
                                     
-                                    // 💡 專家升級：壓縮格內邊距 (p-0.5) 讓文字能緊密排列
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
                                     
                                     if (!hasContent) {
@@ -886,13 +886,11 @@
                                             onClick={() => goToDate(dateStr)}
                                             className={btnClass}
                                         >
-                                            {/* 💡 專家升級：日期與打勾標記的最佳化排版 */}
                                             <div className="w-full relative flex justify-center items-center mb-0.5 shrink-0">
                                                 <span className={`text-[13px] md:text-base font-bold ${hasEvent && !isPlan ? 'text-blue-600' : 'text-slate-700'}`}>{dateObj.getDate()}</span>
                                                 {isDone && <i className="fa-solid fa-check-circle text-[9px] md:text-xs text-emerald-500 absolute right-0"></i>}
                                             </div>
                                             
-                                            {/* 💡 專家升級：極簡窄邊條 (Border-left) 與靠左對齊的資訊流 */}
                                             <div className="w-full flex flex-col gap-[2px] overflow-hidden">
                                                 {hasEvent && dayEvents.slice(0, 2).map((evt, idx) => (
                                                     <div key={idx} className="w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium bg-blue-50 text-blue-700 text-left tracking-tight border-l-[3px] border-l-blue-500">
