@@ -6,6 +6,10 @@
     
     <title>葵涌堂悅曆</title>
     
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <meta property="og:type" content="website">
     <meta property="og:title" content="葵涌堂悅曆">
     <meta property="og:description" content="同讀聖言行神所悅 · 聆聽聖靈活主新生。立即查看每日讀經進度與教會最新動態！">
@@ -1353,17 +1357,28 @@
     </script>
     
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
-                        console.log('✅ PWA 引擎啟動成功');
-                    })
-                    .catch(err => {
-                        console.warn('❌ PWA 引擎啟動失敗: ', err);
-                    });
-            });
-        }
+	    if ('serviceWorker' in navigator) {
+        	window.addEventListener('load', () => {
+            	navigator.serviceWorker.register('./sw.js')
+                	.then(registration => {
+                    		console.log('✅ PWA 引擎啟動成功');
+                    
+                    	// 💡 專家升級：強制要求瀏覽器去伺服器檢查 sw.js 是否有更新
+                    		registration.update();
+
+                    // 💡 專家升級：如果偵測到新版本的 SW 啟動並接管了畫面，自動幫教友刷新一次頁面
+                    		let refreshing;
+                    		navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        		if (refreshing) return;
+                        		refreshing = true;
+                        		window.location.reload();
+                    		});
+                	})
+                	.catch(err => {
+                    		console.warn('❌ PWA 引擎啟動失敗: ', err);
+                	});
+        	});
+    	}
     </script>
 </body>
 </html>
