@@ -1359,7 +1359,9 @@
     <script>
 	    if ('serviceWorker' in navigator) {
         	window.addEventListener('load', () => {
-            	navigator.serviceWorker.register('./sw.js')
+				// 💡 每次更新網頁時，順便在這裡手動改一個參數 (例如 ?v=4)，
+				// 這會強制 Chrome 絕對不准快取 sw.js，必須立刻向伺服器索取最新版本！
+				navigator.serviceWorker.register('./sw.js?v=4')
                 	.then(registration => {
                     		console.log('✅ PWA 引擎啟動成功');
                     
