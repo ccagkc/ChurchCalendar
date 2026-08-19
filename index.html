@@ -247,6 +247,39 @@
 			        setSyncing(false);
 			    }
 			};
+
+		// 💡 專家升級：背景靜默自動刷新推播 Token 引擎 (無感修復舊用戶)
+			const autoSilentTokenRefresh = async (user, fb) => {
+				// 1. 若瀏覽器未授權推播或設備不支援，直接跳過
+				if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+				if (!fb || !fb.messagingModule || !fb.messaging) return;
+			
+				try {
+					// 2. 獲取當前唯一運作中的 Service Worker (sw.js)
+					const registration = await navigator.serviceWorker.ready;
+					
+					// 3. 向 Google FCM 請求當前設備綁定 sw.js 的最新 Token
+					const freshToken = await fb.messagingModule.getToken(fb.messaging, { 
+						vapidKey: SITE_CONFIG.VAPID_KEY,
+						serviceWorkerRegistration: registration 
+					});
+			
+					if (freshToken && user) {
+						// 4. 靜默覆蓋 Firebase 資料庫中的舊 Token
+						const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', user.uid);
+						await fb.dbModule.setDoc(profileRef, { 
+							fcmToken: freshToken, 
+							notificationsEnabled: true,
+							lastTokenRefresh: new Date().toISOString()
+						}, { merge: true });
+			
+						setPushSubscribed(true);
+						console.log('✅ [FCM Engine] 背景靜默更新成功！最新 Token 已無縫寫入資料庫。');
+					}
+				} catch (e) {
+					console.warn('⚠️ [FCM Engine] 靜默更新失敗:', e);
+				}
+			};
 			
             useEffect(() => {
                 const handleOnline = () => setIsOffline(false);
@@ -329,6 +362,8 @@
                                     setCompleted(cloudDates);
                                     localStorage.setItem(userLocalKey, JSON.stringify(cloudDates));
                                 });
+								autoSilentTokenRefresh(user, { auth, db, appId, authModule, dbModule, messagingModule, messaging });
+								
                             } else {
                                 setCurrentUser(null); setUserProfile(null); setPushSubscribed(false);
                                 const guestSaved = localStorage.getItem(getLocalKey(null));
