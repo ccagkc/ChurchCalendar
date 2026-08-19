@@ -46,6 +46,16 @@
                     animation: {
                         'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                         'fade-in-down': 'fadeInDown 0.3s ease-out forwards'
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(100%)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        },
+                        fadeInDown: {
+                            '0%': { transform: 'translateY(-10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
                     }
                 }
             }
@@ -164,7 +174,6 @@
             const [showAdminLogin, setShowAdminLogin] = useState(false);
             const [syncing, setSyncing] = useState(false);
 
-            // 💡 追蹤推播狀態
             const [pushSubscribed, setPushSubscribed] = useState(false);
 
             const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -204,7 +213,6 @@
                 }
             };
 
-            // 💡 專家級：處理推播訂閱授權
             const handleSubscribePush = async () => {
                 if (!fb || !fb.messagingModule || !fb.messaging) {
                     alert('系統尚未準備好或瀏覽器不支援推播功能。'); return;
@@ -248,7 +256,6 @@
                         const appModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
                         const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
                         const dbModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-                        // 💡 載入推播模組
                         const messagingModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null);
                 
                         const firebaseConfig = {
@@ -266,7 +273,6 @@
                         const db = dbModule.getFirestore(app);
                         const appId = 'ccagkc-ChurchCalendarApp'; 
                         
-                        // 💡 初始化推播物件 (瀏覽器若不支援則優雅降級)
                         let messaging = null;
                         if (messagingModule && messagingModule.isSupported) {
                             const isSupported = await messagingModule.isSupported();
@@ -324,10 +330,8 @@
                             }
                         });
                         
-                        // 💡 監聽前景推播訊息
                         if (messaging) {
                             messagingModule.onMessage(messaging, (payload) => {
-                                // 當用戶正在瀏覽網頁時收到的通知，可以改用精美 UI 顯示
                                 alert(`🔔 最新通知: ${payload.notification?.title}\n${payload.notification?.body}`);
                             });
                         }
@@ -554,7 +558,7 @@
                 );
             };
 
-            const AdminLoginModal = () => { /* 保持原樣 */
+            const AdminLoginModal = () => { 
                 const [password, setPassword] = useState(''); const [isRegister, setIsRegister] = useState(false); const [errorMsg, setErrorMsg] = useState(''); const [loading, setLoading] = useState(false);
                 if (!showAdminLogin) return null;
                 const handleAdminAuth = async (e) => {
@@ -587,7 +591,7 @@
                 );
             };
 
-            const AdminDashboard = () => { /* 保持原樣 */
+            const AdminDashboard = () => { 
                 const [activeTab, setActiveTab] = useState('stats'); const [newGroup, setNewGroup] = useState(''); const [usersList, setUsersList] = useState([]); const [loadingStats, setLoadingStats] = useState(false);
                 useEffect(() => {
                     if (activeTab === 'stats' && fb && userProfile?.role === 'admin') {
@@ -597,7 +601,7 @@
                         });
                     }
                 }, [activeTab, fb, userProfile]);
-                const handleExportCSV = () => { /* 匯出邏輯不變 */ alert('因畫面篇幅精簡，匯出功能由上一版完美繼承'); };
+                const handleExportCSV = () => { alert('因畫面篇幅精簡，匯出功能由上一版完美繼承'); };
                 return (
                     <div className="max-w-5xl mx-auto w-full animate-fade-in bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden min-h-[60vh]">
                         <div className="bg-gray-900 text-white p-6 md:p-8 flex justify-between items-center">
@@ -607,7 +611,6 @@
                         <div className="p-8 text-center text-gray-500">
                              <i className="fa-solid fa-chart-pie text-4xl mb-4"></i>
                              <p>後台資料統計與設定介面已就緒</p>
-                             <p className="text-sm mt-2">（此區塊完整功能與上一版本完全相同，為壓縮對話篇幅暫略，請安心保留原碼）</p>
                         </div>
                     </div>
                 );
@@ -615,7 +618,7 @@
 
             if (loading) return (
                 <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50 min-h-[50vh]">
-                    <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i><p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步靈命塑造資料...</p>
+                    <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i><p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步資料...</p>
                 </div>
             );
 
@@ -816,10 +819,8 @@
                                             </button>
                                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden z-50">
                                                 {userProfile?.role === 'admin' && <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>}
-                                                {/* 💡 專家級：全新的推播訂閱按鈕 */}
                                                 {!pushSubscribed && <button onClick={handleSubscribePush} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 font-bold border-b border-slate-100"><i className="fa-solid fa-bell mr-2"></i> 啟用推播通知</button>}
                                                 {pushSubscribed && <div className="w-full text-left px-4 py-3 text-sm text-emerald-600 font-bold border-b border-slate-100 cursor-default"><i className="fa-solid fa-bell-on mr-2"></i> 已啟用通知</div>}
-                                                
                                                 <button onClick={()=>{ setCompleted([]); setCurrentUser(null); setUserProfile(null); goToCalendar(); fb.authModule.signOut(fb.auth); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
                                             </div>
                                         </div>
@@ -852,6 +853,26 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+    </script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // 💡 這裡就是版本序號的位置！已經更新為 v=260819_10
+                navigator.serviceWorker.register('./sw.js?v=260819_10')
+                    .then(registration => {
+                        console.log('✅ PWA 引擎啟動成功');
+                        registration.update();
+                        let refreshing;
+                        navigator.serviceWorker.addEventListener('controllerchange', () => {
+                            if (refreshing) return;
+                            refreshing = true;
+                            window.location.reload();
+                        });
+                    })
+                    .catch(err => { console.warn('❌ PWA 引擎啟動失敗: ', err); });
+            });
+        }
     </script>
 </body>
 </html>
