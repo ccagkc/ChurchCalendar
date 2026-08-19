@@ -1,6 +1,38 @@
-// 💡 【發佈鐵則】每次您修改了 index.html，請務必把這裡的 v3 改成 v4、v5...
-// 只要這個檔案有任何一個字元變動，瀏覽器就會啟動強制更新機制！
-const CACHE_NAME = 'ccagkc-pwa-cache-v260819_10'; 
+// ==========================================
+// 1. Firebase 推播引擎 (FCM) 模組載入
+// ==========================================
+importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
+
+// 初始化 Firebase
+firebase.initializeApp({
+    apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
+    authDomain: "ccagkc-biblereading-project.firebaseapp.com",
+    databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "ccagkc-biblereading-project",
+    storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
+    messagingSenderId: "962459311265",
+    appId: "1:962459311265:web:cbad43a46491a046e5e4e0"
+});
+
+const messaging = firebase.messaging();
+
+// 強制攔截背景推播
+messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] 🚨 成功攔截到背景推播！Payload: ', payload);
+    const notificationTitle = payload.notification?.title || '葵涌堂悅曆通知';
+    const notificationOptions = {
+        body: payload.notification?.body || '您有一則新訊息',
+        icon: '/icon-192.png',
+        data: payload.data || {}
+    };
+    self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// ==========================================
+// 2. 原本的 PWA 離線快取引擎 (Cache) 保持在下方
+// ==========================================
+const CACHE_NAME = 'ccagkc-pwa-cache-v260819_11'; // 💡 記得更新版號
 
 self.addEventListener('install', (event) => {
     // 強制最新版的 Service Worker 立即接管，不等待舊版關閉
