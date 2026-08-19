@@ -84,7 +84,7 @@
             description: "你要盡心、盡性、盡意、盡力、愛主你的神\n又要愛鄰舍如同自己",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "ccagkc-calendar-progress-v1",
-            cacheKey: "ccagkc-calendar-cache-v3", // 💡 更新快取庫強制重載
+            cacheKey: "ccagkc-calendar-cache-v3", 
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
         };
@@ -955,7 +955,6 @@
                 if (!devotionModalOpen || !devotionData[selectedDate]) return null;
                 const dev = devotionData[selectedDate];
                 
-                // 💡 專家修復：加入最高容錯率的影像抓取引擎
                 const devImgRaw = dev['Image Link'] || dev['Image'] || dev['圖片'] || dev['image link'];
                 const devotionImg = getImageUrl(devImgRaw);
                 
@@ -1049,6 +1048,7 @@
                     <AdminLoginModal />
                     {renderDevotionModal()} 
                     
+                    {/* 💡 專家修復：完美恢復頂部導覽列的登入/註冊/管理員核心元件 */}
                     <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
                         {isOffline && (
                             <div className="bg-amber-100 text-amber-800 text-xs text-center py-1.5 font-bold animate-fade-in-down border-b border-amber-200 flex justify-center items-center">
@@ -1060,6 +1060,35 @@
                                 <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={goToCalendar}><i className="fa-solid fa-cross text-xl"></i></div>
                                 <div><h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
                             </div>
+                            
+                            {fb && (
+                                <div className="flex items-center gap-2">
+                                    {currentUser ? (
+                                        <div className="group relative">
+                                            <button className={`flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm ${userProfile?.role === 'admin' ? 'bg-slate-800 text-white border-slate-900' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
+                                                <i className={`fa-solid ${userProfile?.role === 'admin' ? 'fa-shield-halved' : 'fa-cloud-check'}`}></i> 
+                                                <span>{currentUser.email.split('@')[0]}</span>
+                                            </button>
+                                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden">
+                                                {userProfile?.role === 'admin' && view !== 'admin-dashboard' && (
+                                                    <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>
+                                                )}
+                                                <button onClick={()=>{ 
+                                                    setCompleted([]); 
+                                                    setCurrentUser(null);
+                                                    setUserProfile(null);
+                                                    goToCalendar();
+                                                    fb.authModule.signOut(fb.auth); 
+                                                }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 hover:border-nature-500 text-slate-700 hover:text-nature-700 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95">
+                                            <i className="fa-solid fa-cloud-arrow-up"></i> <span className="hidden md:inline">登入 / 註冊</span>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </header>
 
@@ -1091,7 +1120,7 @@
     <script>
 	    if ('serviceWorker' in navigator) {
         	window.addEventListener('load', () => {
-				navigator.serviceWorker.register('./sw.js?v=260819_4')
+				navigator.serviceWorker.register('./sw.js?v=260819_5')
                 	.then(registration => {
                     		console.log('✅ PWA 引擎啟動成功');
                     		registration.update();
