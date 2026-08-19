@@ -18,7 +18,8 @@
 
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#475569">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="葵涌堂悅曆">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -1042,7 +1043,7 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             // 💡 只需要註冊這個唯一的超級大腦即可！
-            navigator.serviceWorker.register('./sw.js?v=260819_11')
+            navigator.serviceWorker.register('./sw.js?v=260819_12')
                 .then(registration => {
                     console.log('✅ PWA 全能超級大腦啟動成功');
                     registration.update();
