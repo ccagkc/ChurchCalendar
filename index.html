@@ -212,34 +212,44 @@
                 }
             };
 
-            const handleSubscribePush = async () => {
-                if (!fb || !fb.messagingModule || !fb.messaging) {
+	// 💡 專家升級：強化版推播訂閱引擎 (明確綁定 GitHub Pages 相對路徑)
+	const handleSubscribePush = async () => {
+    		if (!fb || !fb.messagingModule || !fb.messaging) {
                     alert('系統尚未準備好或瀏覽器不支援推播功能。'); return;
-                }
-                try {
-                    const permission = await Notification.requestPermission();
-                    if (permission === 'granted') {
-                        setSyncing(true);
-                        const token = await fb.messagingModule.getToken(fb.messaging, { vapidKey: SITE_CONFIG.VAPID_KEY });
-                        if (token && currentUser) {
-                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
-                            await fb.dbModule.setDoc(profileRef, { fcmToken: token, notificationsEnabled: true }, { merge: true });
-                            setPushSubscribed(true);
-                            alert('🔔 推播通知已成功啟用！您將不再錯過教會的最新消息。');
-                        } else if (token) {
-                            alert('🔔 推播憑證獲取成功！(建議您登入帳號以確保通知發送精準)');
-                        }
-                    } else {
-                        alert('您已拒絕推播通知。如需開啟，請至瀏覽器設定中更改權限。');
-                    }
-                } catch (e) {
-                    console.error('Push Subscription Error:', e);
-                    alert('啟用失敗，請確保您的裝置/瀏覽器支援推播功能 (iOS 需將網頁加入主畫面)。');
-                } finally {
-                    setSyncing(false);
-                }
-            };
-
+    		}
+    		try {
+        		const permission = await Notification.requestPermission();
+        		if (permission === 'granted') {
+            			setSyncing(true);
+            
+            		// 💡 關鍵修復 1：手動註冊並抓取當前目錄的 Service Worker (解決 GitHub Pages 路徑陷阱)
+            			const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+            
+            		// 💡 關鍵修復 2：強制 Firebase 使用我們剛抓到的 registration
+            			const token = await fb.messagingModule.getToken(fb.messaging, { 
+                			vapidKey: SITE_CONFIG.VAPID_KEY,
+                			serviceWorkerRegistration: registration 
+            			});
+            
+            			if (token && currentUser) {
+                			const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
+                			await fb.dbModule.setDoc(profileRef, { fcmToken: token, notificationsEnabled: true }, { merge: true });
+                			setPushSubscribed(true);
+                			alert('🔔 推播通知已成功啟用！您將不再錯過教會的最新消息。');
+            			} else if (token) {
+                			alert('🔔 推播憑證獲取成功！(建議您登入帳號以確保通知發送精準)');
+            			}
+        		} else {
+            			alert('您已拒絕推播通知。如需開啟，請至瀏覽器設定中更改權限。');
+        		}
+    		} catch (e) {
+        		console.error('Push Subscription Error 專家除錯追蹤:', e);
+        		// 💡 關鍵修復 3：把系統真實的錯誤代碼 (e.message) 印出來，方便我們一秒抓蟲！
+        		alert(`啟用失敗，系統攔截到錯誤：\n${e.message}\n\n請確保裝置支援推播功能。`);
+    		} finally {
+        		setSyncing(false);
+    		}
+	};
             useEffect(() => {
                 const handleOnline = () => setIsOffline(false);
                 const handleOffline = () => setIsOffline(true);
