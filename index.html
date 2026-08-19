@@ -1048,7 +1048,6 @@
                     <AdminLoginModal />
                     {renderDevotionModal()} 
                     
-                    {/* 💡 專家修復：完美恢復頂部導覽列的登入/註冊/管理員核心元件 */}
                     <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
                         {isOffline && (
                             <div className="bg-amber-100 text-amber-800 text-xs text-center py-1.5 font-bold animate-fade-in-down border-b border-amber-200 flex justify-center items-center">
@@ -1105,9 +1104,13 @@
                         {view === 'admin-dashboard' && userProfile?.role === 'admin' ? <AdminDashboard /> : view === 'reader' && selectedDate ? renderReaderView() : renderCalendarView()}
                     </main>
 
+                    {/* 💡 專家修復：完美補回頁尾的管理員專屬登入入口！ */}
                     <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 tracking-widest mt-auto">
                         <p className="mb-2 text-slate-300 text-xs uppercase"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
-                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition text-[10px] uppercase mb-6"><p>{SITE_CONFIG.footerText}</p></div>
+                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition text-[10px] uppercase mb-6">
+                            <p>{SITE_CONFIG.footerText}</p>
+                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
+                        </div>
                     </footer>
                 </>
             );
@@ -1120,7 +1123,7 @@
     <script>
 	    if ('serviceWorker' in navigator) {
         	window.addEventListener('load', () => {
-				navigator.serviceWorker.register('./sw.js?v=260819_5')
+				navigator.serviceWorker.register('./sw.js?v=260819_6')
                 	.then(registration => {
                     		console.log('✅ PWA 引擎啟動成功');
                     		registration.update();
