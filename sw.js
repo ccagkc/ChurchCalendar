@@ -1,6 +1,6 @@
 // 💡 【發佈鐵則】每次您修改了 index.html，請務必把這裡的 v3 改成 v4、v5...
 // 只要這個檔案有任何一個字元變動，瀏覽器就會啟動強制更新機制！
-const CACHE_NAME = 'ccagkc-pwa-cache-v260819_3'; 
+const CACHE_NAME = 'ccagkc-pwa-cache-v260819_4'; 
 
 self.addEventListener('install', (event) => {
     // 強制最新版的 Service Worker 立即接管，不等待舊版關閉
