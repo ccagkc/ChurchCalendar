@@ -84,9 +84,14 @@
             description: "你要盡心、盡性、盡意、盡力、愛主你的神\n又要愛鄰舍如同自己",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "ccagkc-calendar-progress-v1",
-            cacheKey: "ccagkc-calendar-cache-v4", // 💡 強制重載最新快取
+            cacheKey: "ccagkc-calendar-cache-v5", 
             pseudoEmailDomain: "@kcc.bible.app",
             adminEmailDomain: "@admin.kcc.app"
+        };
+        
+        // 💡 專家核心引擎：動態快取金鑰生成器，實現 Guest 與 User 的完美隔離
+        const getLocalKey = (uid = null) => {
+            return uid ? `${SITE_CONFIG.storageKey}-${uid}` : `${SITE_CONFIG.storageKey}-guest`;
         };
         
         const formatDate = (dateObj) => {
@@ -155,7 +160,13 @@
             const [devotionData, setDevotionData] = useState({}); 
             
             const [validDates, setValidDates] = useState([]); 
-            const [completed, setCompleted] = useState([]);
+            
+            // 💡 專家優化：初次載入時，直接讀取 Guest 沙盒進度
+            const [completed, setCompleted] = useState(() => {
+                const guestSaved = localStorage.getItem(getLocalKey(null));
+                return guestSaved ? JSON.parse(guestSaved) : [];
+            });
+            
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
 
@@ -208,6 +219,14 @@
                 const nextScale = (fontScale + 1) % 3;
                 setFontScale(nextScale);
                 localStorage.setItem('kcc_font_scale', nextScale);
+            };
+
+            // 💡 專家級：訪客單機沙盒重置引擎
+            const handleClearGuestProgress = () => {
+                if (confirm('確定要清除這台設備上的未登入閱讀紀錄嗎？\n(這不會影響任何已註冊帳號的資料)')) {
+                    setCompleted([]);
+                    localStorage.removeItem(getLocalKey(null));
+                }
             };
 
             useEffect(() => {
@@ -270,14 +289,31 @@
                                     }
                                 });
                 
+                                // 💡 專家優化：完美雲端合併演算法 (Cloud-Merge Algorithm)
                                 const progressRef = dbModule.doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'progress');
                                 unsubscribeProgress.current = dbModule.onSnapshot(progressRef, (docSnap) => {
-                                    if (docSnap.exists()) setCompleted(docSnap.data().completedDates || []);
+                                    let cloudDates = docSnap.exists() ? (docSnap.data().completedDates || []) : [];
+                                    const userLocalKey = getLocalKey(user.uid);
+                                    const localSaved = localStorage.getItem(userLocalKey);
+                                    
+                                    if (localSaved) {
+                                        const localDates = JSON.parse(localSaved);
+                                        const mergedDates = [...new Set([...cloudDates, ...localDates])].sort();
+                                        // 若本地有離線產生的新進度，自動上傳回雲端
+                                        if (mergedDates.length > cloudDates.length) {
+                                            dbModule.setDoc(progressRef, { completedDates: mergedDates }, { merge: true });
+                                            cloudDates = mergedDates;
+                                        }
+                                    }
+                                    setCompleted(cloudDates);
+                                    localStorage.setItem(userLocalKey, JSON.stringify(cloudDates));
                                 });
                             } else {
                                 setCurrentUser(null);
                                 setUserProfile(null);
-                                setCompleted([]); 
+                                // 💡 專家優化：登出後不會強制清空畫面，而是優雅地載入 Guest 沙盒進度
+                                const guestSaved = localStorage.getItem(getLocalKey(null));
+                                setCompleted(guestSaved ? JSON.parse(guestSaved) : []); 
                                 if (!new URLSearchParams(window.location.search).get('date')) goToCalendar();
                             }
                         });
@@ -449,8 +485,14 @@
                 const isDone = completed.includes(dateStr);
                 const next = isDone ? completed.filter(x => x !== dateStr) : [...completed, dateStr];
                 
+                // 1. 即時更新畫面狀態
                 setCompleted(next); 
                 
+                // 2. 💡 專家優化：不管有沒有登入，進度永遠寫入專屬或 Guest 本地沙盒！保證離線可用！
+                const uid = currentUser ? currentUser.uid : null;
+                localStorage.setItem(getLocalKey(uid), JSON.stringify(next));
+                
+                // 3. 若有登入，額外進行雙軌雲端備份
                 if (currentUser && fb) {
                     setSyncing(true);
                     try {
@@ -461,7 +503,7 @@
                         await fb.dbModule.setDoc(profileRef, { completedCount: next.length, lastActive: new Date().toISOString() }, { merge: true });
 
                     } catch (e) { console.error("寫入雲端失敗 (請確認權限設定)", e); } finally { setSyncing(false); }
-                } else if (fb && !currentUser) { setShowAuthModal(true); }
+                }
             };
 
             const AuthModal = () => {
@@ -494,8 +536,20 @@
                                 return;
                             }
                             const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, fakeEmail, FIXED_PASS);
+                            
+                            // 💡 專家優化：無縫繼承訪客模式辛苦點出的進度，自動過戶給新帳號！
+                            const guestSaved = localStorage.getItem(getLocalKey(null));
+                            const initialProgress = guestSaved ? JSON.parse(guestSaved) : [];
+
                             const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
-                            await fb.dbModule.setDoc(profileRef, { username: username.trim(), group: selectedGroup, role: 'user', completedCount: 0, createdAt: new Date().toISOString() });
+                            await fb.dbModule.setDoc(profileRef, { username: username.trim(), group: selectedGroup, role: 'user', completedCount: initialProgress.length, createdAt: new Date().toISOString() });
+                            
+                            if (initialProgress.length > 0) {
+                                const progressRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'users', cred.user.uid, 'data', 'progress');
+                                await fb.dbModule.setDoc(progressRef, { completedDates: initialProgress }, { merge: true });
+                                localStorage.removeItem(getLocalKey(null)); // 過戶後清空沙盒
+                            }
+                            
                             setShowAuthModal(false);
                         }
                     } catch (error) { setAuthError("系統連線異常，請稍後再試。"); } finally { setProcessing(false); }
@@ -594,7 +648,6 @@
                 );
             };
 
-            // 💡 專家修復：滿血復活的高階 AdminDashboard
             const AdminDashboard = () => {
                 const [activeTab, setActiveTab] = useState('stats'); 
                 const [newGroup, setNewGroup] = useState('');
@@ -1283,7 +1336,15 @@
                         <p className="mb-2 text-slate-300 text-xs uppercase"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
                         <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition text-[10px] uppercase mb-6">
                             <p>{SITE_CONFIG.footerText}</p>
-                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
+                            
+                            {/* 💡 專家升級：智慧型單機資料清除按鈕 (僅未登入且有進度時顯示) */}
+                            {!currentUser && completed.length > 0 && (
+                                <button onClick={handleClearGuestProgress} className="text-slate-400 hover:text-red-400 transition transform hover:scale-110" title="清除本機未登入紀錄">
+                                    <i className="fa-solid fa-trash-can"></i>
+                                </button>
+                            )}
+                            
+                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white transition transform hover:scale-110" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
                         </div>
                     </footer>
                 </>
@@ -1297,7 +1358,7 @@
     <script>
 	    if ('serviceWorker' in navigator) {
         	window.addEventListener('load', () => {
-				navigator.serviceWorker.register('./sw.js?v=260819_7')
+				navigator.serviceWorker.register('./sw.js?v=260819_9')
                 	.then(registration => {
                     		console.log('✅ PWA 引擎啟動成功');
                     		registration.update();
