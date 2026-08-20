@@ -41,7 +41,7 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260820_3';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260820_4';
 const STATIC_ASSETS = [
     './',
     './index.html',
