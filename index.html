@@ -242,25 +242,33 @@
                 }
             };
 
-            // 💡 專家新功能：推播通知「開/關」雙向控制引擎
+            // 💡 專家修復：跨平台 (PC/Mobile) 雙向推播開關引擎
             const togglePushSubscription = async () => {
                 if (!fb || !fb.messagingModule || !fb.messaging || !currentUser) {
                     alert('請先登入帳號以管理推播通知設定。'); return;
                 }
-
+            
                 setSyncing(true);
                 const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
-
+            
                 try {
                     if (pushSubscribed) {
                         if (confirm('確定要關閉推播通知嗎？關閉後您將無法收到教會的每日靈修與緊急動態。')) {
-                            await fb.messagingModule.deleteToken(fb.messaging);
+                            
+                            // 1. 優先清除雲端 Firestore 資料庫的 Token 紀錄 (確保雲端不再發送推播)
                             await fb.dbModule.setDoc(profileRef, { 
                                 fcmToken: fb.dbModule.deleteField(), 
                                 notificationsEnabled: false,
                                 lastTokenUpdated: new Date().toISOString()
                             }, { merge: true });
-
+            
+                            // 2. 靜默廢除當前設備的 Token，防止 Firebase SDK 在手機端試圖註冊預設的 firebase-messaging-sw.js
+                            try {
+                                await fb.messagingModule.deleteToken(fb.messaging);
+                            } catch (deleteErr) {
+                                console.warn('⚠️ [FCM Engine] 設備端 Token 廢除靜默跳過 (不影響關閉結果):', deleteErr);
+                            }
+            
                             setPushSubscribed(false);
                             alert('🔕 已成功關閉推播通知。您可以隨時重新開啟！');
                         }
@@ -268,18 +276,20 @@
                         const permission = await Notification.requestPermission();
                         if (permission === 'granted') {
                             const registration = await navigator.serviceWorker.ready;
+                            
+                            // 強制綁定我們唯一的全能 sw.js
                             const token = await fb.messagingModule.getToken(fb.messaging, { 
                                 vapidKey: SITE_CONFIG.VAPID_KEY,
                                 serviceWorkerRegistration: registration 
                             });
-
+            
                             if (token) {
                                 await fb.dbModule.setDoc(profileRef, { 
                                     fcmToken: token, 
                                     notificationsEnabled: true,
                                     lastTokenUpdated: new Date().toISOString()
                                 }, { merge: true });
-
+            
                                 setPushSubscribed(true);
                                 alert('🔔 推播通知已成功啟用！您將不再錯過教會的最新消息。');
                             }
@@ -294,7 +304,7 @@
                     setSyncing(false);
                 }
             };
-
+            
             useEffect(() => {
                 const handleOnline = () => setIsOffline(false);
                 const handleOffline = () => setIsOffline(true);
