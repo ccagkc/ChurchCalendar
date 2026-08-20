@@ -18,7 +18,6 @@
 
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#475569">
-    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="葵涌堂悅曆">
@@ -85,13 +84,15 @@
             description: "你要盡心、盡性、盡意、盡力、愛主你的神\n又要愛鄰舍如同自己",
             footerText: "© CCAGKC · SPIRITUAL FORMATION CALENDAR",
             storageKey: "ccagkc-calendar-progress-v1",
-            cacheKey: "ccagkc-calendar-cache-v6", 
+            cacheKey: "ccagkc-calendar-cache-v5", 
             pseudoEmailDomain: "@kcc.bible.app",
-            adminEmailDomain: "@admin.kcc.app",
-            VAPID_KEY: "BL_D6wHmhWI-MDvEK0Ow3NkB8y51FjANqNNlDNsY1ZFDbgcB_Y_M8Fnffr4Zj9niuJjlIpXZ3Y8EM8JdI82e3QM"
+            adminEmailDomain: "@admin.kcc.app"
         };
         
-        const getLocalKey = (uid = null) => uid ? `${SITE_CONFIG.storageKey}-${uid}` : `${SITE_CONFIG.storageKey}-guest`;
+        // 💡 專家核心引擎：動態快取金鑰生成器，實現 Guest 與 User 的完美隔離
+        const getLocalKey = (uid = null) => {
+            return uid ? `${SITE_CONFIG.storageKey}-${uid}` : `${SITE_CONFIG.storageKey}-guest`;
+        };
         
         const formatDate = (dateObj) => {
             const year = dateObj.getFullYear();
@@ -122,7 +123,9 @@
                 const match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
                 if (match) fileId = match[1];
             }
-            if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+            if (fileId) {
+                return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+            }
             return url;
         };
 
@@ -157,6 +160,8 @@
             const [devotionData, setDevotionData] = useState({}); 
             
             const [validDates, setValidDates] = useState([]); 
+            
+            // 💡 專家優化：初次載入時，直接讀取 Guest 沙盒進度
             const [completed, setCompleted] = useState(() => {
                 const guestSaved = localStorage.getItem(getLocalKey(null));
                 return guestSaved ? JSON.parse(guestSaved) : [];
@@ -174,123 +179,53 @@
             const [showAdminLogin, setShowAdminLogin] = useState(false);
             const [syncing, setSyncing] = useState(false);
 
-            const [pushSubscribed, setPushSubscribed] = useState(false);
-
             const [isOffline, setIsOffline] = useState(!navigator.onLine);
-            const [fontScale, setFontScale] = useState(() => parseInt(localStorage.getItem('kcc_font_scale')) || 0);
+            const [fontScale, setFontScale] = useState(() => {
+                return parseInt(localStorage.getItem('kcc_font_scale')) || 0;
+            });
 
             let unsubscribeProgress = useRef(null);
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
 
             const goToCalendar = () => {
-                setView('calendar'); setShowAnswer(false); setDevotionModalOpen(false);
-                window.scrollTo(0,0); window.history.replaceState(null, '', window.location.pathname);
+                setView('calendar');
+                setShowAnswer(false);
+                setDevotionModalOpen(false);
+                window.scrollTo(0,0);
+                window.history.replaceState(null, '', window.location.pathname);
             };
 
             const goToDate = (dateStr) => {
-                setSelectedDate(dateStr); setShowAnswer(false); window.scrollTo(0,0);
+                setSelectedDate(dateStr);
+                setShowAnswer(false);
+                window.scrollTo(0,0);
                 window.history.replaceState(null, '', `?date=${dateStr}`);
+                
                 const dayHasBible = validDates.includes(dateStr);
                 const dayHasEvent = (eventData[dateStr] || []).length > 0;
                 const dayHasDevotion = !!devotionData[dateStr];
 
                 if (!dayHasBible && !dayHasEvent && dayHasDevotion) {
-                    setView('reader'); setDevotionModalOpen(true);
+                    setView('reader'); 
+                    setDevotionModalOpen(true);
                 } else {
-                    setView('reader'); setDevotionModalOpen(false);
+                    setView('reader');
+                    setDevotionModalOpen(false);
                 }
             };
 
             const toggleFontScale = () => {
                 const nextScale = (fontScale + 1) % 3;
-                setFontScale(nextScale); localStorage.setItem('kcc_font_scale', nextScale);
+                setFontScale(nextScale);
+                localStorage.setItem('kcc_font_scale', nextScale);
             };
 
+            // 💡 專家級：訪客單機沙盒重置引擎
             const handleClearGuestProgress = () => {
                 if (confirm('確定要清除這台設備上的未登入閱讀紀錄嗎？\n(這不會影響任何已註冊帳號的資料)')) {
-                    setCompleted([]); localStorage.removeItem(getLocalKey(null));
-                }
-            };
-
-            // 💡 專家修復：背景靜默自動刷新 Token (無感升級舊用戶)
-            const autoSilentTokenRefresh = async (user, fbObj) => {
-                if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-                if (!fbObj || !fbObj.messagingModule || !fbObj.messaging) return;
-
-                try {
-                    const registration = await navigator.serviceWorker.ready;
-                    const freshToken = await fbObj.messagingModule.getToken(fbObj.messaging, { 
-                        vapidKey: SITE_CONFIG.VAPID_KEY,
-                        serviceWorkerRegistration: registration 
-                    });
-
-                    if (freshToken && user) {
-                        const profileRef = fbObj.dbModule.doc(fbObj.db, 'artifacts', fbObj.appId, 'public', 'data', 'userProfiles', user.uid);
-                        await fbObj.dbModule.setDoc(profileRef, { 
-                            fcmToken: freshToken, 
-                            notificationsEnabled: true,
-                            lastTokenRefresh: new Date().toISOString()
-                        }, { merge: true });
-
-                        setPushSubscribed(true);
-                        console.log('✅ [FCM Engine] 背景靜默更新成功！最新 Token 已無縫綁定至 sw.js');
-                    }
-                } catch (e) {
-                    console.warn('⚠️ [FCM Engine] 靜默更新跳過:', e);
-                }
-            };
-
-            // 💡 專家修復：推播通知「開/關」雙向控制引擎 (完全綁定唯一的 sw.js)
-            const togglePushSubscription = async () => {
-                if (!fb || !fb.messagingModule || !fb.messaging || !currentUser) {
-                    alert('請先登入帳號以管理推播通知設定。'); return;
-                }
-
-                setSyncing(true);
-                const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
-
-                try {
-                    if (pushSubscribed) {
-                        if (confirm('確定要關閉推播通知嗎？關閉後您將無法收到教會的每日靈修與緊急動態。')) {
-                            await fb.messagingModule.deleteToken(fb.messaging);
-                            await fb.dbModule.setDoc(profileRef, { 
-                                fcmToken: fb.dbModule.deleteField(), 
-                                notificationsEnabled: false,
-                                lastTokenUpdated: new Date().toISOString()
-                            }, { merge: true });
-
-                            setPushSubscribed(false);
-                            alert('🔕 已成功關閉推播通知。您可以隨時重新開啟！');
-                        }
-                    } else {
-                        const permission = await Notification.requestPermission();
-                        if (permission === 'granted') {
-                            const registration = await navigator.serviceWorker.ready;
-                            const token = await fb.messagingModule.getToken(fb.messaging, { 
-                                vapidKey: SITE_CONFIG.VAPID_KEY,
-                                serviceWorkerRegistration: registration 
-                            });
-
-                            if (token) {
-                                await fb.dbModule.setDoc(profileRef, { 
-                                    fcmToken: token, 
-                                    notificationsEnabled: true,
-                                    lastTokenUpdated: new Date().toISOString()
-                                }, { merge: true });
-
-                                setPushSubscribed(true);
-                                alert('🔔 推播通知已成功啟用！您將不再錯過教會的最新消息。');
-                            }
-                        } else {
-                            alert('您已拒絕推播通知。如需開啟，請點擊網址列旁的「鎖頭 🔒」圖示更改權限。');
-                        }
-                    }
-                } catch (e) {
-                    console.error('Push Toggle Error:', e);
-                    alert(`操作失敗：\n${e.message}`);
-                } finally {
-                    setSyncing(false);
+                    setCompleted([]);
+                    localStorage.removeItem(getLocalKey(null));
                 }
             };
 
@@ -299,7 +234,10 @@
                 const handleOffline = () => setIsOffline(true);
                 window.addEventListener('online', handleOnline);
                 window.addEventListener('offline', handleOffline);
-                return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+                return () => {
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
             }, []);
 
             useEffect(() => {
@@ -309,7 +247,6 @@
                         const appModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
                         const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
                         const dbModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-                        const messagingModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null);
                 
                         const firebaseConfig = {
                             apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
@@ -325,15 +262,8 @@
                         const auth = authModule.getAuth(app);
                         const db = dbModule.getFirestore(app);
                         const appId = 'ccagkc-ChurchCalendarApp'; 
-                        
-                        let messaging = null;
-                        if (messagingModule && messagingModule.isSupported) {
-                            const isSupported = await messagingModule.isSupported();
-                            if (isSupported) messaging = messagingModule.getMessaging(app);
-                        }
                 
-                        const fbObj = { auth, db, appId, authModule, dbModule, messagingModule, messaging };
-                        setFb(fbObj);
+                        setFb({ auth, db, appId, authModule, dbModule });
                 
                         const settingsRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'general');
                         unsubscribeSettings.current = dbModule.onSnapshot(settingsRef, (snap) => {
@@ -346,19 +276,20 @@
                 
                             if (user) {
                                 setCurrentUser(user);
-                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') setView('admin-dashboard');
+                                if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') {
+                                    setView('admin-dashboard');
+                                }
                                 
                                 const profileRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
                                 unsubscribeProfile.current = dbModule.onSnapshot(profileRef, (snap) => {
                                     if (snap.exists()) {
-                                        const profile = snap.data();
-                                        setUserProfile(profile);
-                                        if (profile.notificationsEnabled) setPushSubscribed(true);
+                                        setUserProfile(snap.data());
                                     } else if (user.email.endsWith(SITE_CONFIG.adminEmailDomain)) {
                                         setUserProfile({ username: user.email.split('@')[0], role: 'admin' });
                                     }
                                 });
                 
+                                // 💡 專家優化：完美雲端合併演算法 (Cloud-Merge Algorithm)
                                 const progressRef = dbModule.doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'progress');
                                 unsubscribeProgress.current = dbModule.onSnapshot(progressRef, (docSnap) => {
                                     let cloudDates = docSnap.exists() ? (docSnap.data().completedDates || []) : [];
@@ -368,6 +299,7 @@
                                     if (localSaved) {
                                         const localDates = JSON.parse(localSaved);
                                         const mergedDates = [...new Set([...cloudDates, ...localDates])].sort();
+                                        // 若本地有離線產生的新進度，自動上傳回雲端
                                         if (mergedDates.length > cloudDates.length) {
                                             dbModule.setDoc(progressRef, { completedDates: mergedDates }, { merge: true });
                                             cloudDates = mergedDates;
@@ -376,25 +308,18 @@
                                     setCompleted(cloudDates);
                                     localStorage.setItem(userLocalKey, JSON.stringify(cloudDates));
                                 });
-
-                                // 💡 關鍵：使用者登入後，自動觸發背景靜默刷新！
-                                autoSilentTokenRefresh(user, fbObj);
-
                             } else {
-                                setCurrentUser(null); setUserProfile(null); setPushSubscribed(false);
+                                setCurrentUser(null);
+                                setUserProfile(null);
+                                // 💡 專家優化：登出後不會強制清空畫面，而是優雅地載入 Guest 沙盒進度
                                 const guestSaved = localStorage.getItem(getLocalKey(null));
                                 setCompleted(guestSaved ? JSON.parse(guestSaved) : []); 
                                 if (!new URLSearchParams(window.location.search).get('date')) goToCalendar();
                             }
                         });
-                        
-                        if (messaging) {
-                            messagingModule.onMessage(messaging, (payload) => {
-                                alert(`🔔 最新通知: ${payload.notification?.title}\n${payload.notification?.body}`);
-                            });
-                        }
-
-                    } catch (e) { console.error("Firebase 模組載入失敗", e); }
+                    } catch (e) {
+                        console.error("Firebase 模組載入失敗", e);
+                    }
                 };
                 initFirebase();
 
@@ -415,10 +340,15 @@
                         const cachedDataStr = localStorage.getItem(SITE_CONFIG.cacheKey);
                         if (cachedDataStr) {
                             const cached = JSON.parse(cachedDataStr);
-                            setData(cached.bible); setEventData(cached.events); setDevotionData(cached.devotion || {}); setValidDates(cached.datesArray);
+                            setData(cached.bible);
+                            setEventData(cached.events);
+                            setDevotionData(cached.devotion || {}); 
+                            setValidDates(cached.datesArray);
+                            
                             if (urlDate && (cached.bible[urlDate] || cached.events[urlDate] || (cached.devotion && cached.devotion[urlDate]))) {
                                 goToDate(urlDate);
-                                const parts = urlDate.split('-'); setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
                             } else {
                                 initViewMonth(cached.datesArray, cached.bible, cached.devotion);
                             }
@@ -430,7 +360,9 @@
                         const devotionUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.DEVOTION_SHEET_NAME)}`;
 
                         const [bibleResp, eventResp, devResp] = await Promise.all([
-                            fetch(bibleUrl).catch(() => null), fetch(eventUrl).catch(() => null), fetch(devResp).catch(() => null)
+                            fetch(bibleUrl).catch(() => null),
+                            fetch(eventUrl).catch(() => null),
+                            fetch(devotionUrl).catch(() => null)
                         ]);
 
                         if (!bibleResp || !bibleResp.ok) {
@@ -438,62 +370,91 @@
                             return; 
                         }
                         
-                        const parseSheet = async (resp) => {
-                            if(!resp || !resp.ok) return [];
-                            const text = await resp.text();
-                            const rows = parseCSV(text);
-                            if(rows.length < 2) return [];
-                            const headers = rows[0].map(h => h.trim());
-                            return rows.slice(1).filter(r => r && r.length >= 2).map(row => {
-                                const item = {}; headers.forEach((h, idx) => item[h] = row[idx]); return item;
-                            });
-                        };
-
-                        const [bibleRaw, eventRaw, devRaw] = await Promise.all([parseSheet(bibleResp), parseSheet(eventResp), parseSheet(devResp)]);
+                        const bibleText = await bibleResp.text();
+                        const bibleRows = parseCSV(bibleText);
+                        const items = {};
+                        const datesArray = [];
+                        if (bibleRows.length >= 2) {
+                            const headers = bibleRows[0].map(h => h.trim());
+                            for(let i=1; i<bibleRows.length; i++) {
+                                const row = bibleRows[i];
+                                if (!row || row.length < 2) continue;
+                                const item = {};
+                                headers.forEach((h, idx) => item[h] = row[idx]);
+                                if(item['日期']) {
+                                    const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
+                                    const parts = dateStr.split('-');
+                                    if (parts.length === 3) {
+                                        const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                                        items[stdDate] = item;
+                                        if (!datesArray.includes(stdDate)) datesArray.push(stdDate);
+                                    }
+                                }
+                            }
+                            datesArray.sort();
+                        }
                         
-                        const items = {}, events = {}, devData = {}, datesArray = [];
+                        const events = {};
+                        if (eventResp && eventResp.ok) {
+                            const eventText = await eventResp.text();
+                            const eventRows = parseCSV(eventText);
+                            if (eventRows.length >= 2) {
+                                const eHeaders = eventRows[0].map(h => h.trim());
+                                for(let i=1; i<eventRows.length; i++) {
+                                    const row = eventRows[i];
+                                    if (!row || row.length < 2) continue;
+                                    const item = {};
+                                    eHeaders.forEach((h, idx) => item[h] = row[idx]);
+                                    if(item['日期']) {
+                                        const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
+                                        const parts = dateStr.split('-');
+                                        if (parts.length === 3) {
+                                            const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                                            if (!events[stdDate]) events[stdDate] = [];
+                                            events[stdDate].push(item);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const devData = {};
+                        if (devResp && devResp.ok) {
+                            const devText = await devResp.text();
+                            const devRows = parseCSV(devText);
+                            if (devRows.length >= 2) {
+                                const dHeaders = devRows[0].map(h => h.trim());
+                                for(let i=1; i<devRows.length; i++) {
+                                    const row = devRows[i];
+                                    if (!row || row.length < 2) continue;
+                                    const item = {};
+                                    dHeaders.forEach((h, idx) => item[h] = row[idx]);
+                                    if(item['日期']) {
+                                        const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
+                                        const parts = dateStr.split('-');
+                                        if (parts.length === 3) {
+                                            const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                                            devData[stdDate] = item;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         
-                        bibleRaw.forEach(item => {
-                            if(item['日期']) {
-                                const parts = item['日期'].replace(/\//g, '-').split(' ')[0].split('-');
-                                if (parts.length === 3) {
-                                    const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                    items[stdDate] = item;
-                                    if (!datesArray.includes(stdDate)) datesArray.push(stdDate);
-                                }
-                            }
-                        });
-                        datesArray.sort();
-
-                        eventRaw.forEach(item => {
-                            if(item['日期']) {
-                                const parts = item['日期'].replace(/\//g, '-').split(' ')[0].split('-');
-                                if (parts.length === 3) {
-                                    const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                    if (!events[stdDate]) events[stdDate] = [];
-                                    events[stdDate].push(item);
-                                }
-                            }
-                        });
-
-                        devRaw.forEach(item => {
-                            if(item['日期']) {
-                                const parts = item['日期'].replace(/\//g, '-').split(' ')[0].split('-');
-                                if (parts.length === 3) {
-                                    const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                    devData[stdDate] = item;
-                                }
-                            }
-                        });
-
-                        setData(items); setEventData(events); setDevotionData(devData); setValidDates(datesArray);
+                        setData(items);
+                        setEventData(events);
+                        setDevotionData(devData);
+                        setValidDates(datesArray);
                         localStorage.setItem(SITE_CONFIG.cacheKey, JSON.stringify({ bible: items, events: events, devotion: devData, datesArray: datesArray }));
                         
                         if (!cachedDataStr) {
                             if (urlDate && (items[urlDate] || events[urlDate] || devData[urlDate])) {
                                 goToDate(urlDate);
-                                const parts = urlDate.split('-'); setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
-                            } else { initViewMonth(datesArray, items, devData); }
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                            } else {
+                                initViewMonth(datesArray, items, devData);
+                            }
                         }
                         setLoading(false);
 
@@ -524,18 +485,24 @@
                 const isDone = completed.includes(dateStr);
                 const next = isDone ? completed.filter(x => x !== dateStr) : [...completed, dateStr];
                 
+                // 1. 即時更新畫面狀態
                 setCompleted(next); 
+                
+                // 2. 💡 專家優化：不管有沒有登入，進度永遠寫入專屬或 Guest 本地沙盒！保證離線可用！
                 const uid = currentUser ? currentUser.uid : null;
                 localStorage.setItem(getLocalKey(uid), JSON.stringify(next));
                 
+                // 3. 若有登入，額外進行雙軌雲端備份
                 if (currentUser && fb) {
                     setSyncing(true);
                     try {
                         const progressRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'users', currentUser.uid, 'data', 'progress');
                         await fb.dbModule.setDoc(progressRef, { completedDates: next }, { merge: true });
+                        
                         const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', currentUser.uid);
                         await fb.dbModule.setDoc(profileRef, { completedCount: next.length, lastActive: new Date().toISOString() }, { merge: true });
-                    } catch (e) { console.error("寫入雲端失敗", e); } finally { setSyncing(false); }
+
+                    } catch (e) { console.error("寫入雲端失敗 (請確認權限設定)", e); } finally { setSyncing(false); }
                 }
             };
 
@@ -551,7 +518,8 @@
                 const handleAction = async (e) => {
                     e.preventDefault();
                     if (username.trim().length < 2) return setAuthError('代號請至少輸入兩個字');
-                    setProcessing(true); setAuthError('');
+                    setProcessing(true);
+                    setAuthError('');
                     const FIXED_PASS = "KccBible@2026_AutoPass";
                     const fakeEmail = `${username.trim().toLowerCase()}${SITE_CONFIG.pseudoEmailDomain}`;
 
@@ -562,18 +530,26 @@
                                 setShowAuthModal(false); 
                             } catch (err) { setStep(2); }
                         } else if (step === 2) {
-                            if (!selectedGroup) { setAuthError('請選擇你所屬的小組'); setProcessing(false); return; }
+                            if (!selectedGroup) {
+                                setAuthError('請選擇你所屬的小組');
+                                setProcessing(false);
+                                return;
+                            }
                             const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, fakeEmail, FIXED_PASS);
+                            
+                            // 💡 專家優化：無縫繼承訪客模式辛苦點出的進度，自動過戶給新帳號！
                             const guestSaved = localStorage.getItem(getLocalKey(null));
                             const initialProgress = guestSaved ? JSON.parse(guestSaved) : [];
+
                             const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
                             await fb.dbModule.setDoc(profileRef, { username: username.trim(), group: selectedGroup, role: 'user', completedCount: initialProgress.length, createdAt: new Date().toISOString() });
                             
                             if (initialProgress.length > 0) {
                                 const progressRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'users', cred.user.uid, 'data', 'progress');
                                 await fb.dbModule.setDoc(progressRef, { completedDates: initialProgress }, { merge: true });
-                                localStorage.removeItem(getLocalKey(null)); 
+                                localStorage.removeItem(getLocalKey(null)); // 過戶後清空沙盒
                             }
+                            
                             setShowAuthModal(false);
                         }
                     } catch (error) { setAuthError("系統連線異常，請稍後再試。"); } finally { setProcessing(false); }
@@ -587,18 +563,19 @@
                                 <h2 className="text-2xl font-bold font-serif flex items-center"><i className="fa-solid fa-cloud-arrow-up mr-3"></i> {step === 1 ? '開啟進度同步' : '首次登記資料'}</h2>
                             </div>
                             <div className="p-6 md:p-8">
-                                {authError && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-4 border border-red-100">{authError}</div>}
+                                {authError && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-4 border border-red-100"><i className="fa-solid fa-triangle-exclamation mr-1"></i> {authError}</div>}
                                 <form onSubmit={handleAction} className="space-y-4">
                                     {step === 1 ? (
                                         <div className="animate-fade-in">
                                             <label className="block text-sm font-bold text-nature-800 mb-2">輸入你的個人代號 或 英文簡稱</label>
-                                            <input type="text" value={username} onChange={e=>setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="例如：peter-chan" className="w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-lg" required />
+                                            <input type="text" value={username} onChange={e=>setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="例如：peter-chan" className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:border-nature-500 bg-gray-50 text-lg" required />
+                                            <p className="text-xs text-gray-500 mt-2"><i className="fa-solid fa-circle-info"></i> 系統自動辨識，首次登記將填寫所屬教會小組。</p>
                                         </div>
                                     ) : (
                                         <div className="animate-fade-in space-y-4">
                                             <div>
-                                                <label className="block text-sm font-bold text-nature-800 mb-2">請選擇你所屬的小組</label>
-                                                <select value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} className="w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-lg" required>
+                                                <label className="block text-sm font-bold text-nature-800 mb-2">請選擇你所屬的小組 <span className="text-red-500">*</span></label>
+                                                <select value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:border-nature-500 bg-gray-50 text-lg" required>
                                                     <option value="" disabled>-- 請選擇小組 --</option>
                                                     {appSettings.groups.map(g => <option key={g} value={g}>{g}</option>)}
                                                 </select>
@@ -616,33 +593,55 @@
                 );
             };
 
-            const AdminLoginModal = () => { 
-                const [password, setPassword] = useState(''); const [isRegister, setIsRegister] = useState(false); const [errorMsg, setErrorMsg] = useState(''); const [loading, setLoading] = useState(false);
+            const AdminLoginModal = () => {
+                const [password, setPassword] = useState('');
+                const [isRegister, setIsRegister] = useState(false);
+                const [errorMsg, setErrorMsg] = useState('');
+                const [loading, setLoading] = useState(false);
                 if (!showAdminLogin) return null;
+
                 const handleAdminAuth = async (e) => {
-                    e.preventDefault(); setLoading(true); setErrorMsg(''); const adminEmail = `admin${SITE_CONFIG.adminEmailDomain}`;
+                    e.preventDefault();
+                    setLoading(true);
+                    setErrorMsg('');
+                    const adminEmail = `admin${SITE_CONFIG.adminEmailDomain}`;
                     try {
                         if (isRegister) {
                             const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, adminEmail, password);
-                            await fb.dbModule.setDoc(fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid), { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
+                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
+                            await fb.dbModule.setDoc(profileRef, { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
                         } else {
                             const cred = await fb.authModule.signInWithEmailAndPassword(fb.auth, adminEmail, password);
-                            const ref = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
-                            const snap = await fb.dbModule.getDoc(ref);
-                            if (!snap.exists()) await fb.dbModule.setDoc(ref, { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
+                            const profileRef = fb.dbModule.doc(fb.db, 'artifacts', fb.appId, 'public', 'data', 'userProfiles', cred.user.uid);
+                            const snap = await fb.dbModule.getDoc(profileRef);
+                            if (!snap.exists()) {
+                                await fb.dbModule.setDoc(profileRef, { username: '系統管理員', role: 'admin', createdAt: new Date().toISOString() });
+                            }
                         }
-                        setShowAdminLogin(false); setView('admin-dashboard'); 
-                    } catch (err) { setErrorMsg(err.message); } finally { setLoading(false); }
+                        setShowAdminLogin(false);
+                        setView('admin-dashboard'); 
+                    } catch (err) {
+                        setErrorMsg(err.message);
+                    } finally { setLoading(false); }
                 };
+
                 return (
                     <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
                         <div className="bg-white rounded-[1.5rem] w-full max-w-sm shadow-2xl overflow-hidden animate-fade-in">
-                            <div className="bg-gray-800 p-5 text-white flex justify-between items-center"><h3 className="font-bold flex items-center"><i className="fa-solid fa-shield-halved mr-2 text-nature-300"></i> 管理員登入</h3><button onClick={() => setShowAdminLogin(false)} className="text-gray-400 hover:text-white transition"><i className="fa-solid fa-xmark text-lg"></i></button></div>
+                            <div className="bg-gray-800 p-5 text-white flex justify-between items-center">
+                                <h3 className="font-bold flex items-center"><i className="fa-solid fa-shield-halved mr-2 text-nature-300"></i> 管理員登入</h3>
+                                <button onClick={() => setShowAdminLogin(false)} className="text-gray-400 hover:text-white transition"><i className="fa-solid fa-xmark text-lg"></i></button>
+                            </div>
                             <form onSubmit={handleAdminAuth} className="p-6 md:p-8 space-y-5">
                                 {errorMsg && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl border border-red-100">{errorMsg}</div>}
-                                <div><input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-nature-500 text-xl tracking-widest text-center font-bold" required autoFocus /></div>
-                                <div className="flex items-center justify-center mt-2"><input type="checkbox" id="regAdmin" checked={isRegister} onChange={(e) => setIsRegister(e.target.checked)} className="mr-2" /><label htmlFor="regAdmin" className="text-xs text-gray-500 cursor-pointer">首次使用</label></div>
-                                <button type="submit" disabled={loading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 text-lg">{loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}</button>
+                                <div><input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-nature-500 focus:ring-4 focus:ring-nature-100 transition text-xl tracking-widest text-center font-bold" required autoFocus /></div>
+                                <div className="flex items-center justify-center mt-2">
+                                    <input type="checkbox" id="regAdmin" checked={isRegister} onChange={(e) => setIsRegister(e.target.checked)} className="mr-2 w-4 h-4 text-nature-600 rounded border-gray-300" />
+                                    <label htmlFor="regAdmin" className="text-xs text-gray-500 cursor-pointer">首次使用 (建立管理員密碼)</label>
+                                </div>
+                                <button type="submit" disabled={loading} className="w-full bg-gray-800 text-white font-bold py-4 rounded-xl hover:bg-gray-700 transition-all active:scale-95 shadow-md text-lg">
+                                    {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : (isRegister ? '設定新密碼' : '安全登入')}
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -698,25 +697,28 @@
                         alert("目前沒有數據可供匯出。");
                         return;
                     }
-                    const headers = ['小組/牧區', '姓名/代號', '已讀天數', '最後活動日期', '註冊日期', '已開啟推播通知'];
+
+                    const headers = ['小組/牧區', '姓名/代號', '已讀天數', '最後活動日期', '註冊日期'];
                     const rows = usersList.map(user => [
                         user.group || '未分類',
                         user.username || '無名',
                         user.completedCount || 0,
                         user.lastActive ? user.lastActive.substring(0, 10) : '無紀錄',
-                        user.createdAt ? user.createdAt.substring(0, 10) : '無紀錄',
-                        user.notificationsEnabled ? '是' : '否'
+                        user.createdAt ? user.createdAt.substring(0, 10) : '無紀錄'
                     ]);
+
                     const csvContent = [
                         headers.join(','),
                         ...rows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
                     ].join('\n');
+
                     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
                     const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
                     const link = document.createElement('a');
                     const url = URL.createObjectURL(blob);
                     const today = new Date();
                     const dateStr = `${today.getFullYear()}${(today.getMonth()+1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
+                    
                     link.setAttribute('href', url);
                     link.setAttribute('download', `葵涌堂_讀經進度統計_${dateStr}.csv`);
                     document.body.appendChild(link);
@@ -735,7 +737,10 @@
                 return (
                     <div className="max-w-5xl mx-auto w-full animate-fade-in bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden min-h-[60vh]">
                         <div className="bg-gray-900 text-white p-6 md:p-8 flex justify-between items-center">
-                            <div><h2 className="text-2xl font-bold font-serif mb-1"><i className="fa-solid fa-server mr-2 text-nature-400"></i> 教會讀經後台系統</h2><p className="text-gray-400 text-sm">管理員：{userProfile?.username}</p></div>
+                            <div>
+                                <h2 className="text-2xl font-bold font-serif mb-1"><i className="fa-solid fa-server mr-2 text-nature-400"></i> 教會讀經後台系統</h2>
+                                <p className="text-gray-400 text-sm">管理員：{userProfile?.username}</p>
+                            </div>
                             <button onClick={goToCalendar} className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition font-bold border border-gray-700">返回前台</button>
                         </div>
 
@@ -755,6 +760,7 @@
                                         </div>
                                         <p className="text-xs text-gray-400 mt-2">新增後，新註冊的使用者將可以在選單中選擇此小組。</p>
                                     </div>
+
                                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                                         <h3 className="font-bold text-lg mb-4 text-gray-800 border-l-4 border-nature-500 pl-3">現有小組列表</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -764,6 +770,7 @@
                                                     <button onClick={() => handleRemoveGroup(g)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition"><i className="fa-solid fa-trash-can"></i></button>
                                                 </div>
                                             ))}
+                                            {appSettings.groups.length === 0 && <div className="text-gray-400 text-sm py-4">目前沒有設定任何小組</div>}
                                         </div>
                                     </div>
                                 </div>
@@ -776,7 +783,10 @@
                                     ) : (
                                         <div className="space-y-6">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 md:px-6 rounded-2xl shadow-sm border border-nature-100 mb-6 gap-4">
-                                                <div><h3 className="font-bold text-nature-800 text-lg">全教會參與數據</h3><p className="text-xs text-gray-400 mt-1">目前共有 {usersList.length} 位參與者</p></div>
+                                                <div>
+                                                    <h3 className="font-bold text-nature-800 text-lg">全教會參與數據</h3>
+                                                    <p className="text-xs text-gray-400 mt-1">目前共有 {usersList.length} 位參與者</p>
+                                                </div>
                                                 <button onClick={handleExportCSV} disabled={usersList.length === 0} className="w-full md:w-auto bg-nature-600 hover:bg-nature-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center">
                                                     <i className="fa-solid fa-file-csv mr-2 text-lg"></i> 匯出 Excel / CSV 報表
                                                 </button>
@@ -794,7 +804,7 @@
                                                         <div className="divide-y divide-gray-100">
                                                             {groupedStats[groupName].sort((a,b) => (b.completedCount||0) - (a.completedCount||0)).map((user, idx) => (
                                                                 <div key={idx} className="flex justify-between items-center p-4 hover:bg-gray-50 transition">
-                                                                    <div className="font-medium text-gray-700">{user.username} {user.notificationsEnabled && <i className="fa-solid fa-bell text-blue-400 ml-1" title="已開啟推播"></i>}</div>
+                                                                    <div className="font-medium text-gray-700">{user.username}</div>
                                                                     <div className="text-sm">
                                                                         <span className="text-gray-400 mr-4 text-xs hidden md:inline">最後活動: {user.lastActive ? user.lastActive.substring(0,10) : '無紀錄'}</span>
                                                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg font-bold">已讀 {user.completedCount || 0} 天</span>
@@ -816,7 +826,8 @@
 
             if (loading) return (
                 <div className="flex-grow flex flex-col items-center justify-center text-nature-600 bg-nature-50 min-h-[50vh]">
-                    <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i><p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步資料...</p>
+                    <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i>
+                    <p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步靈命塑造資料...</p>
                 </div>
             );
 
@@ -932,11 +943,35 @@
             };
 
             const renderReaderView = () => {
-                const currentData = data[selectedDate] || {}; const currentEvents = eventData[selectedDate] || []; const currentDevotion = devotionData[selectedDate]; 
-                const isPlan = validDates.includes(selectedDate); const isCompleted = completed.includes(selectedDate);
+                const currentData = data[selectedDate] || {};
+                const currentEvents = eventData[selectedDate] || [];
+                const currentDevotion = devotionData[selectedDate]; 
+                
+                const isPlan = validDates.includes(selectedDate);
+                const isCompleted = completed.includes(selectedDate);
                 const allContentDates = Array.from(new Set([...validDates, ...Object.keys(eventData), ...Object.keys(devotionData)])).sort();
                 const currentIndex = allContentDates.indexOf(selectedDate);
-                const hasBibleContent = isPlan && (!!currentData['語音連結'] || !!currentData['經文'] || !!currentData['釋義'] || !!currentData['問題'] || (currentData['經卷'] && String(currentData['經卷']).trim() !== ''));
+
+                const hasAudio = isPlan && !!currentData['語音連結'];
+                const hasScripture = isPlan && !!currentData['經文'];
+                const hasExplanation = isPlan && !!currentData['釋義'];
+                const hasQuestion = isPlan && !!currentData['問題'];
+                const hasAnswer = isPlan && !!currentData['答案'];
+                const hasBibleContent = isPlan && (hasAudio || hasScripture || hasExplanation || hasQuestion || (currentData['經卷'] && String(currentData['經卷']).trim() !== ''));
+
+                const audioInfo = hasAudio ? parseExternalLink(currentData['語音連結'], 'audio') : null;
+                const scriptInfo = hasScripture ? parseExternalLink(currentData['經文'], 'doc') : null;
+                const questionInfo = hasQuestion ? parseExternalLink(currentData['問題'], 'doc') : null;
+                const answerInfo = hasAnswer ? parseExternalLink(currentData['答案'], 'doc') : null;
+
+                const getValidUrl = (str) => {
+                    if (!str) return null;
+                    const s = String(str).trim();
+                    if (s.startsWith('http')) return s;
+                    if (s.startsWith('www.')) return `https://${s}`;
+                    if (s.includes('forms.gle') || s.includes('google.com')) return `https://${s}`;
+                    return null;
+                };
 
                 const fontClasses = { 0: "text-lg md:text-xl", 1: "text-xl md:text-2xl", 2: "text-2xl md:text-3xl font-bold tracking-wide leading-relaxed" };
                 const currentFontClass = fontClasses[fontScale];
@@ -953,31 +988,175 @@
 
                         {currentDevotion && (
                             <button onClick={() => setDevotionModalOpen(true)} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] p-6 shadow-xl mb-8 transform transition hover:scale-[1.02] active:scale-[0.98] flex items-center justify-between group">
-                                <div className="flex items-center text-left"><div className="bg-white/20 p-4 rounded-2xl mr-4"><i className="fa-solid fa-dove text-3xl"></i></div><div><div className="text-purple-200 text-sm font-bold tracking-widest mb-1">{currentDevotion['類別'] || '專屬靈修'}</div><h2 className="text-2xl font-bold">{currentDevotion['內頁標題'] || '進入今日靈修默想'}</h2></div></div><i className="fa-solid fa-arrow-right text-2xl opacity-50 group-hover:opacity-100 group-hover:translate-x-2 transition-all"></i>
+                                <div className="flex items-center text-left">
+                                    <div className="bg-white/20 p-4 rounded-2xl mr-4"><i className="fa-solid fa-dove text-3xl"></i></div>
+                                    <div>
+                                        <div className="text-purple-200 text-sm font-bold tracking-widest mb-1">{currentDevotion['類別'] || '專屬靈修'}</div>
+                                        <h2 className="text-2xl font-bold">{currentDevotion['內頁標題'] || '進入今日靈修默想'}</h2>
+                                    </div>
+                                </div>
+                                <i className="fa-solid fa-arrow-right text-2xl opacity-50 group-hover:opacity-100 group-hover:translate-x-2 transition-all"></i>
                             </button>
                         )}
 
                         {currentEvents.map((evt, idx) => {
-                            const regUrl = evt['可報名'] && evt['可報名'].startsWith('http') ? evt['可報名'] : null;
-                            const imageUrl = getImageUrl(evt['Image Link'] || evt['Image'] || evt['圖片'] || evt['image link']);
+                            const regUrl = getValidUrl(evt['可報名']);
+                            const mediaLinkRaw = evt['Media Link'] || evt['Video Link'] || evt['video link'] || evt['Video link'];
+                            const mediaUrl = getValidUrl(mediaLinkRaw);
+                            const imageUrlRaw = evt['Image Link'] || evt['Image'] || evt['圖片'] || evt['image link'];
+                            const imageUrl = getImageUrl(imageUrlRaw);
+
                             return (
                                 <article key={idx} className="bg-white rounded-[2.5rem] shadow-xl border-2 border-blue-100 overflow-hidden mb-8 relative animate-fade-in">
-                                    <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden flex justify-between items-start"><i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i><div className="relative z-10 pr-4"><h2 className="text-3xl font-sans font-bold leading-tight">{evt['活動標題']}</h2></div></div>
-                                    {imageUrl && <div className="px-6 md:px-10 pt-6 pb-2"><img src={imageUrl} className="w-full rounded-2xl shadow-md border" /></div>}
-                                    {evt['活動詳情'] && <div className={`px-6 md:px-10 text-gray-700 leading-loose whitespace-pre-wrap ${currentFontClass} p-6`}>{evt['活動詳情']}</div>}
-                                    {regUrl && <div className="p-6 md:p-8 bg-blue-50/30 border-t border-blue-100"><a href={regUrl} target="_blank" className="flex items-center justify-center bg-blue-600 text-white font-bold py-4 px-6 rounded-2xl">前往報名</a></div>}
+                                    <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-8 md:p-10 relative overflow-hidden flex justify-between items-start">
+                                         <i className="fa-solid fa-bullhorn absolute right-[-5%] top-[-20%] text-[10rem] opacity-10"></i>
+                                         <div className="relative z-10 pr-4">
+                                             <div className="flex items-center space-x-2 text-blue-200 text-sm font-bold tracking-[0.2em] mb-3">
+                                                 <i className="fa-solid fa-calendar-star"></i>
+                                                 <span>教會動態速遞 {currentEvents.length > 1 ? `(${idx + 1}/${currentEvents.length})` : ''}</span>
+                                             </div>
+                                             <h2 className="text-3xl md:text-4xl font-sans font-bold leading-tight">
+                                                 {evt['內頁標題'] || evt['活動標題']}
+                                             </h2>
+                                         </div>
+                                    </div>
+                                    
+                                    {imageUrl && (
+                                        <div className="px-6 md:px-10 pt-6 md:pt-8 pb-2">
+                                            <img 
+                                                src={imageUrl} 
+                                                alt={evt['活動標題']} 
+                                                className="w-full h-auto object-contain rounded-2xl shadow-md border border-slate-100 bg-slate-50"
+                                                loading="lazy"
+                                                onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {evt['活動詳情'] && (
+                                        <div className={`px-6 md:px-10 text-gray-700 leading-loose whitespace-pre-wrap font-sans border-b border-gray-100 ${currentFontClass} ${imageUrl ? 'pb-6 md:pb-10 pt-4' : 'p-6 md:p-10'}`}>
+                                            {evt['活動詳情']}
+                                        </div>
+                                    )}
+                                    
+                                    {(regUrl || mediaUrl) && (
+                                        <div className="p-6 md:p-8 flex flex-col md:flex-row gap-4 bg-blue-50/30 border-t border-blue-100">
+                                            {regUrl && (
+                                                <a href={regUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md active:scale-95 text-lg group">
+                                                    <i className="fa-solid fa-pen-to-square mr-2 group-hover:scale-110 transition-transform"></i> 前往報名
+                                                </a>
+                                            )}
+                                            {mediaUrl && (
+                                                <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center bg-white border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm active:scale-95 text-lg group">
+                                                    <i className="fa-solid fa-circle-play mr-2 text-blue-500 group-hover:scale-110 transition-transform"></i> 開啟相關影音
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
                                 </article>
                             );
                         })}
 
                         {hasBibleContent && (
                             <article className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden mb-8">
-                                <div className="bg-nature-700 text-white p-8 md:p-10"><h2 className="text-3xl font-serif font-bold">{currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}</h2></div>
-                                <div className="p-6 md:p-10 space-y-8">
-                                    {currentData['經文'] && (
+                                <div className="bg-nature-700 text-white p-8 md:p-10">
+                                    <div className="flex items-center space-x-2 text-nature-300 text-sm font-bold tracking-[0.2em] mb-3">
+                                        <i className="fa-solid fa-book-open-reader"></i>
+                                        <span>今日讀經進度</span>
+                                    </div>
+                                    <h2 className="text-3xl md:text-4xl font-serif font-bold">
+                                        {currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}
+                                    </h2>
+                                </div>
+                                
+                                <div className="p-6 md:p-10 space-y-12">
+                                    {audioInfo && (
+                                        <section className="bg-nature-50/50 p-6 rounded-3xl border border-nature-100 shadow-inner">
+                                            <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm">
+                                                <i className="fa-solid fa-circle-play mr-2 text-nature-600"></i> 經文語音朗讀
+                                            </h4>
+                                            {audioInfo.type === 'embed' ? (
+                                                <iframe src={audioInfo.url} className="w-full h-16 border-0 rounded-xl bg-transparent"></iframe>
+                                            ) : (
+                                                <audio controls className="w-full h-10"><source src={audioInfo.url}/></audio>
+                                            )}
+                                        </section>
+                                    )}
+
+                                    {hasScripture && (
                                         <section>
-                                            <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3 mb-4">聖經經文</h4>
-                                            <div className={`bg-slate-50 border border-slate-200 p-6 rounded-2xl font-serif whitespace-pre-wrap leading-loose ${currentFontClass}`}>{currentData['經文']}</div>
+                                            <div className="flex justify-between items-end mb-6">
+                                                <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">聖經經文</h4>
+                                                {currentData['經文'].includes('http') && (
+                                                    <a href={currentData['經文']} target="_blank" className="text-xs text-nature-600 hover:underline font-bold">
+                                                        <i className="fa-solid fa-up-right-from-square mr-1"></i> 全螢幕閱讀
+                                                    </a>
+                                                )}
+                                            </div>
+                                            <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 min-h-[100px] shadow-inner">
+                                                {scriptInfo && scriptInfo.type === 'embed' ? (
+                                                    <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                        <iframe src={scriptInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                    </div>
+                                                ) : (
+                                                    <div className={`p-6 md:p-8 font-serif text-gray-800 whitespace-pre-wrap leading-loose ${currentFontClass}`}>
+                                                        {currentData['經文']}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {hasExplanation && (
+                                        <section>
+                                            <h4 className="text-nature-700 font-bold mb-4 border-l-4 border-nature-500 pl-3">經文釋義</h4>
+                                            <div className={`bg-nature-50/30 p-6 md:p-8 rounded-3xl border border-nature-100 text-gray-700 italic font-serif leading-loose ${currentFontClass}`}>
+                                                {currentData['釋義']}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {hasQuestion && (
+                                        <section className="pt-6 border-t border-dashed border-slate-300">
+                                            <div className="flex justify-between items-end mb-6">
+                                                <h4 className="text-nature-700 font-bold border-l-4 border-nature-500 pl-3">將神的話讀入心</h4>
+                                            </div>
+                                            <div className="rounded-2xl overflow-hidden bg-white border-2 border-slate-100 min-h-[100px]">
+                                                {questionInfo && questionInfo.type === 'embed' ? (
+                                                    <div className="relative pt-[130%] md:pt-[100%] w-full">
+                                                        <iframe src={questionInfo.url} className="absolute inset-0 w-full h-full border-0"></iframe>
+                                                    </div>
+                                                ) : (
+                                                    <div className={`p-6 md:p-8 font-serif text-gray-800 whitespace-pre-wrap leading-loose ${currentFontClass}`}>
+                                                        {currentData['問題']}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {hasAnswer && (
+                                                <div className="mt-6">
+                                                    {!showAnswer ? (
+                                                        <button onClick={() => setShowAnswer(true)} className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all shadow-sm flex items-center w-full md:w-auto justify-center">
+                                                            <i className="fa-solid fa-lightbulb mr-2 text-amber-500"></i> 顯示參考答案
+                                                        </button>
+                                                    ) : (
+                                                        <div className="bg-nature-50 border border-nature-200 rounded-2xl p-6 md:p-8 relative mt-4 animate-fade-in shadow-inner">
+                                                            <h4 className="text-nature-700 font-bold mb-4 flex items-center border-b border-nature-200 pb-3">
+                                                                <i className="fa-solid fa-key mr-2 text-nature-500"></i> 參考答案
+                                                            </h4>
+                                                            {answerInfo && answerInfo.type === 'embed' ? (
+                                                                <div className="relative pt-[130%] md:pt-[100%] w-full mt-4">
+                                                                    <iframe src={answerInfo.url} className="absolute inset-0 w-full h-full border-0 rounded-xl"></iframe>
+                                                                </div>
+                                                            ) : (
+                                                                <div className={`font-serif text-gray-700 whitespace-pre-wrap leading-loose ${currentFontClass}`}>
+                                                                    {currentData['答案']}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </section>
                                     )}
                                 </div>
@@ -986,13 +1165,14 @@
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                             {(hasBibleContent || currentDevotion) ? (
-                                <button onClick={()=>toggleFinish(selectedDate)} className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl flex items-center justify-center ${isCompleted ? 'bg-white text-nature-600 border-2 border-nature-500' : 'bg-nature-600 text-white hover:bg-nature-700'}`}>
-                                    <i className={`fa-solid mr-3 ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i> {isCompleted ? '已完成' : '標記完成'}
+                                <button onClick={()=>toggleFinish(selectedDate)} className={`md:col-span-2 py-5 rounded-2xl text-lg font-bold shadow-xl transition-all active:scale-95 flex items-center justify-center ${isCompleted ? 'bg-white text-nature-600 border-2 border-nature-500' : 'bg-nature-600 text-white hover:bg-nature-700'}`}>
+                                    {syncing ? <i className="fa-solid fa-spinner fa-spin mr-3 text-xl"></i> : <i className={`fa-solid mr-3 text-xl ${isCompleted ? 'fa-check-double' : 'fa-check'}`}></i>} {isCompleted ? '我已完成今日進度' : '標記今日完成'}
                                 </button>
                             ) : (<div className="md:col-span-2 hidden md:block"></div>)}
+                            
                             <div className="flex gap-2">
-                                <button disabled={currentIndex <= 0} onClick={() => goToDate(allContentDates[currentIndex - 1])} className="flex-1 py-5 bg-white border border-slate-300 rounded-2xl shadow-sm disabled:opacity-20"><i className="fa-solid fa-arrow-left"></i></button>
-                                <button disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} onClick={() => goToDate(allContentDates[currentIndex + 1])} className="flex-1 py-5 bg-white border border-slate-300 rounded-2xl shadow-sm disabled:opacity-20"><i className="fa-solid fa-arrow-right"></i></button>
+                                <button disabled={currentIndex <= 0} onClick={() => goToDate(allContentDates[currentIndex - 1])} className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md font-bold transition hover:bg-slate-50"><i className="fa-solid fa-arrow-left"></i></button>
+                                <button disabled={currentIndex === -1 || currentIndex >= allContentDates.length - 1} onClick={() => goToDate(allContentDates[currentIndex + 1])} className="flex-1 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 disabled:opacity-20 shadow-md font-bold transition hover:bg-slate-50"><i className="fa-solid fa-arrow-right"></i></button>
                             </div>
                         </div>
                     </div>
@@ -1089,7 +1269,7 @@
                     </div>
                 );
             };
-            
+
             return (
                 <>
                     <AuthModal />
@@ -1097,42 +1277,42 @@
                     {renderDevotionModal()} 
                     
                     <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm sticky top-0 z-40">
-                        {isOffline && <div className="bg-amber-100 text-amber-800 text-xs text-center py-1.5 font-bold">目前處於離線模式</div>}
+                        {isOffline && (
+                            <div className="bg-amber-100 text-amber-800 text-xs text-center py-1.5 font-bold animate-fade-in-down border-b border-amber-200 flex justify-center items-center">
+                                <i className="fa-solid fa-cloud-arrow-down mr-2"></i> 目前處於離線模式，正在顯示手機快取資料
+                            </div>
+                        )}
                         <div className="max-w-5xl mx-auto px-4 py-4 md:py-5 flex justify-between items-center gap-2">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white" onClick={goToCalendar}><i className="fa-solid fa-cross text-xl"></i></div>
-                                <div><h1 className="text-xl font-bold text-slate-800">{SITE_CONFIG.titleLine2}</h1></div>
+                                <div className="w-10 h-10 bg-nature-600 rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3 cursor-pointer" onClick={goToCalendar}><i className="fa-solid fa-cross text-xl"></i></div>
+                                <div><h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">{SITE_CONFIG.titleLine2}</h1></div>
                             </div>
                             
                             {fb && (
                                 <div className="flex items-center gap-2">
                                     {currentUser ? (
-                                        <div className="group relative z-50">
-                                            <button className="flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm bg-emerald-50 text-emerald-800 border-emerald-300 relative z-50">
-                                                <i className="fa-solid fa-cloud-check"></i> <span>{currentUser.email.split('@')[0]}</span>
+                                        <div className="group relative">
+                                            <button className={`flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm ${userProfile?.role === 'admin' ? 'bg-slate-800 text-white border-slate-900' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
+                                                <i className={`fa-solid ${userProfile?.role === 'admin' ? 'fa-shield-halved' : 'fa-cloud-check'}`}></i> 
+                                                <span>{currentUser.email.split('@')[0]}</span>
                                             </button>
-                                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden z-50">
-                                                {userProfile?.role === 'admin' && <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>}
-                                                
-                                                {/* 💡 專家修復：雙向開關動態按鈕 */}
-                                                <button 
-                                                    onClick={togglePushSubscription} 
-                                                    className={`w-full text-left px-4 py-3 text-sm font-bold border-b border-slate-100 flex items-center justify-between transition ${
-                                                        pushSubscribed ? 'text-amber-600 hover:bg-amber-50' : 'text-blue-600 hover:bg-blue-50'
-                                                    }`}
-                                                >
-                                                    <span>
-                                                        <i className={`fa-solid ${pushSubscribed ? 'fa-bell-slash' : 'fa-bell'} mr-2`}></i>
-                                                        {pushSubscribed ? '取消推播通知' : '啟用推播通知'}
-                                                    </span>
-                                                    {pushSubscribed && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">運行中</span>}
-                                                </button>
-
-                                                <button onClick={()=>{ setCompleted([]); setCurrentUser(null); setUserProfile(null); goToCalendar(); fb.authModule.signOut(fb.auth); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
+                                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden">
+                                                {userProfile?.role === 'admin' && view !== 'admin-dashboard' && (
+                                                    <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>
+                                                )}
+                                                <button onClick={()=>{ 
+                                                    setCompleted([]); 
+                                                    setCurrentUser(null);
+                                                    setUserProfile(null);
+                                                    goToCalendar();
+                                                    fb.authModule.signOut(fb.auth); 
+                                                }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-1.5 rounded-full text-xs font-bold"><i className="fa-solid fa-cloud-arrow-up"></i> 登入</button>
+                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 hover:border-nature-500 text-slate-700 hover:text-nature-700 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95">
+                                            <i className="fa-solid fa-cloud-arrow-up"></i> <span className="hidden md:inline">登入 / 註冊</span>
+                                        </button>
                                     )}
                                 </div>
                             )}
@@ -1140,18 +1320,31 @@
                     </header>
 
                     {view === 'calendar' && (
-                        <div className="bg-gradient-to-br from-nature-800 to-nature-600 text-white py-10 px-4 shadow-xl text-center"><h1 className="text-3xl font-bold">{SITE_CONFIG.titleLine1}</h1><p className="text-xl italic text-nature-200 mt-4">{SITE_CONFIG.subtitle}</p></div>
+                        <div className="bg-gradient-to-br from-nature-800 to-nature-600 text-white py-10 px-4 shadow-xl text-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none"><i className="fa-solid fa-seedling text-[15rem] -ml-10 -mt-10"></i></div>
+                            <h1 className="text-3xl md:text-5xl font-bold mb-2 relative z-10 tracking-tight">{SITE_CONFIG.titleLine1}</h1>
+                            <p className="text-xl md:text-2xl font-serif italic text-nature-200 mb-4 relative z-10 mt-4">{SITE_CONFIG.subtitle}</p>
+                            <p className="text-nature-100 opacity-90 relative z-10 font-medium whitespace-pre-wrap leading-relaxed">{SITE_CONFIG.description}</p>
+                        </div>
                     )}
 
-                    <main className="flex-grow py-8 px-4 w-full bg-slate-200/70 relative z-0">
+                    <main className="flex-grow py-8 px-4 w-full bg-slate-200/70">
                         {view === 'admin-dashboard' && userProfile?.role === 'admin' ? <AdminDashboard /> : view === 'reader' && selectedDate ? renderReaderView() : renderCalendarView()}
                     </main>
 
-                    <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 mt-auto">
-                        <div className="flex justify-center items-center gap-4 opacity-50 text-[10px] uppercase mb-6">
+                    <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 tracking-widest mt-auto">
+                        <p className="mb-2 text-slate-300 text-xs uppercase"><i className="fa-solid fa-seedling mr-2"></i>{SITE_CONFIG.description}</p>
+                        <div className="flex justify-center items-center gap-4 opacity-50 hover:opacity-100 transition text-[10px] uppercase mb-6">
                             <p>{SITE_CONFIG.footerText}</p>
-                            {!currentUser && completed.length > 0 && <button onClick={handleClearGuestProgress} className="text-slate-400 hover:text-red-400" title="清除本機紀錄"><i className="fa-solid fa-trash-can"></i></button>}
-                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400" title="管理員"><i className="fa-solid fa-lock"></i></button>}
+                            
+                            {/* 💡 專家升級：智慧型單機資料清除按鈕 (僅未登入且有進度時顯示) */}
+                            {!currentUser && completed.length > 0 && (
+                                <button onClick={handleClearGuestProgress} className="text-slate-400 hover:text-red-400 transition transform hover:scale-110" title="清除本機未登入紀錄">
+                                    <i className="fa-solid fa-trash-can"></i>
+                                </button>
+                            )}
+                            
+                            {!currentUser && <button onClick={() => setShowAdminLogin(true)} className="text-slate-400 hover:text-white transition transform hover:scale-110" title="管理員登入"><i className="fa-solid fa-lock"></i></button>}
                         </div>
                     </footer>
                 </>
@@ -1163,23 +1356,22 @@
     </script>
     
     <script>
-        // 💡 專家修復：只註冊唯一的超級大腦 sw.js，徹底解決 SWRace Condition 衝突
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=260820_1')
-                    .then(registration => {
-                        console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
-                        registration.update();
-                        let refreshing;
-                        navigator.serviceWorker.addEventListener('controllerchange', () => {
-                            if (refreshing) return;
-                            refreshing = true;
-                            window.location.reload();
-                        });
-                    })
-                    .catch(err => { console.warn('❌ PWA 引擎啟動失敗: ', err); });
-            });
-        }
+	    if ('serviceWorker' in navigator) {
+        	window.addEventListener('load', () => {
+				navigator.serviceWorker.register('./sw.js?v=260819_9')
+                	.then(registration => {
+                    		console.log('✅ PWA 引擎啟動成功');
+                    		registration.update();
+                    		let refreshing;
+                    		navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        		if (refreshing) return;
+                        		refreshing = true;
+                        		window.location.reload();
+                    		});
+                	})
+                	.catch(err => { console.warn('❌ PWA 引擎啟動失敗: ', err); });
+        	});
+    	}
     </script>
 </body>
 </html>
