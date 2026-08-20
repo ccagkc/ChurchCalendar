@@ -16,15 +16,26 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 💡 關鍵修復：智慧型防重複背景推播監聽器
 messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] 🚨 成功攔截背景推播！Payload: ', payload);
-    const notificationTitle = payload.notification?.title || '葵涌堂悅曆通知';
-    const notificationOptions = {
-        body: payload.notification?.body || '您有一則新訊息',
-        icon: '/icon-192.png',
+    console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
+
+    // 🛑 核心邏輯：如果 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，sw.js 直接 return 避免重複！
+    if (payload.notification) {
+        console.log('[SW] ℹ️ 系統已自動渲染 Notification，跳過手動 showNotification 以防重複。');
+        return;
+    }
+
+    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，才由 sw.js 手動觸發通知
+    const title = payload.data?.title || '葵涌堂悅曆';
+    const options = {
+        body: payload.data?.body || '您有一則新動態',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
         data: payload.data || {}
     };
-    self.registration.showNotification(notificationTitle, notificationOptions);
+
+    self.registration.showNotification(title, options);
 });
 
 // ==========================================
