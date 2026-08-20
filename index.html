@@ -214,34 +214,48 @@
                 }
             };
 
-            // 💡 專家新功能：背景靜默自動刷新 Token (無感修復舊用戶)
+            // 💡 專家修復：尊重用戶意願的靜默 Token 刷新引擎
             const autoSilentTokenRefresh = async (user, fbObj) => {
                 if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-                if (!fbObj || !fbObj.messagingModule || !fbObj.messaging) return;
-
+                if (!fbObj || !fbObj.messagingModule || !fbObj.messaging || !user) return;
+            
+                // 🛑 防禦檢查 1：檢查本機是否記錄了該用戶已手動停用推播
+                if (localStorage.getItem(`kcc_push_disabled_${user.uid}`) === 'true') {
+                    console.log('ℹ️ [FCM Engine] 用戶已手動停用推播，跳過背景自動刷新。');
+                    return;
+                }
+            
                 try {
+                    const profileRef = fbObj.dbModule.doc(fbObj.db, 'artifacts', fbObj.appId, 'public', 'data', 'userProfiles', user.uid);
+                    const profileSnap = await fbObj.dbModule.getDoc(profileRef);
+            
+                    // 🛑 防禦檢查 2：若雲端資料庫明確記錄用戶已關閉推播，則不自動覆蓋
+                    if (profileSnap.exists() && profileSnap.data().notificationsEnabled === false) {
+                        console.log('ℹ️ [FCM Engine] 雲端紀錄顯示推播已關閉，停止靜默綁定。');
+                        return;
+                    }
+            
                     const registration = await navigator.serviceWorker.ready;
                     const freshToken = await fbObj.messagingModule.getToken(fbObj.messaging, { 
                         vapidKey: SITE_CONFIG.VAPID_KEY,
                         serviceWorkerRegistration: registration 
                     });
-
-                    if (freshToken && user) {
-                        const profileRef = fbObj.dbModule.doc(fbObj.db, 'artifacts', fbObj.appId, 'public', 'data', 'userProfiles', user.uid);
+            
+                    if (freshToken) {
                         await fbObj.dbModule.setDoc(profileRef, { 
                             fcmToken: freshToken, 
                             notificationsEnabled: true,
                             lastTokenRefresh: new Date().toISOString()
                         }, { merge: true });
-
+            
                         setPushSubscribed(true);
-                        console.log('✅ [FCM Engine] 背景靜默更新成功！最新 Token 已無縫綁定至 sw.js');
+                        console.log('✅ [FCM Engine] 背景靜默更新成功！');
                     }
                 } catch (e) {
                     console.warn('⚠️ [FCM Engine] 靜默更新跳過:', e);
                 }
             };
-
+            
             // 💡 專家修復：跨平台 (PC/Mobile) 雙向推播開關引擎
             const togglePushSubscription = async () => {
                 if (!fb || !fb.messagingModule || !fb.messaging || !currentUser) {
@@ -255,18 +269,20 @@
                     if (pushSubscribed) {
                         if (confirm('確定要關閉推播通知嗎？關閉後您將無法收到教會的每日靈修與緊急動態。')) {
                             
-                            // 1. 優先清除雲端 Firestore 資料庫的 Token 紀錄 (確保雲端不再發送推播)
+                            // 1. 雲端資料庫註銷狀態
                             await fb.dbModule.setDoc(profileRef, { 
                                 fcmToken: fb.dbModule.deleteField(), 
                                 notificationsEnabled: false,
                                 lastTokenUpdated: new Date().toISOString()
                             }, { merge: true });
             
-                            // 2. 靜默廢除當前設備的 Token，防止 Firebase SDK 在手機端試圖註冊預設的 firebase-messaging-sw.js
+                            // 2. 💡 關鍵新增：記錄本機停用標記，防止重新登入時被靜默刷新覆蓋
+                            localStorage.setItem(`kcc_push_disabled_${currentUser.uid}`, 'true');
+            
                             try {
                                 await fb.messagingModule.deleteToken(fb.messaging);
                             } catch (deleteErr) {
-                                console.warn('⚠️ [FCM Engine] 設備端 Token 廢除靜默跳過 (不影響關閉結果):', deleteErr);
+                                console.warn('⚠️ [FCM Engine] 設備端 Token 廢除靜默跳過:', deleteErr);
                             }
             
                             setPushSubscribed(false);
@@ -277,7 +293,6 @@
                         if (permission === 'granted') {
                             const registration = await navigator.serviceWorker.ready;
                             
-                            // 強制綁定我們唯一的全能 sw.js
                             const token = await fb.messagingModule.getToken(fb.messaging, { 
                                 vapidKey: SITE_CONFIG.VAPID_KEY,
                                 serviceWorkerRegistration: registration 
@@ -290,8 +305,11 @@
                                     lastTokenUpdated: new Date().toISOString()
                                 }, { merge: true });
             
+                                // 3. 💡 關鍵新增：用戶重新開啟推播時，清除停用標記
+                                localStorage.removeItem(`kcc_push_disabled_${currentUser.uid}`);
+            
                                 setPushSubscribed(true);
-                                alert('🔔 推播通知已成功啟用！您將不再錯過教會的最新消息。');
+                                alert('🔔 推播通知已成功啟用！');
                             }
                         } else {
                             alert('您已拒絕推播通知。如需開啟，請點擊網址列旁的「鎖頭 🔒」圖示更改權限。');
@@ -1276,7 +1294,7 @@
         // 💡 註冊唯一的超級大腦 sw.js
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=260820_4')
+                navigator.serviceWorker.register('./sw.js?v=260820_5')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
