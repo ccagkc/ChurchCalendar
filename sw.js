@@ -1,5 +1,3 @@
-// sw.js (v260819_12) - 離線快取與 FCM 雙劍合璧終極版
-
 // ==========================================
 // 1. Firebase 推播引擎 (FCM)
 // ==========================================
@@ -32,7 +30,7 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260819_12';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260820_1';
 const STATIC_ASSETS = [
     './',
     './index.html',
