@@ -22,33 +22,6 @@ const messaging = firebase.messaging();
 // 💡 專案基底 URL (確保點擊永遠在 ChurchCalendar 子路徑下運作)
 const SITE_BASE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 
-/**
- * 🛠️ 輔助函式：URL 規格化修復器 (自動校正相對/絕對路徑，徹底告別 404)
- */
-function sanitizeTargetUrl(rawUrl) {
-    if (!rawUrl) return SITE_BASE_URL;
-
-    // 若傳入完整正確網址
-    if (rawUrl.startsWith('https://ccagkc.github.io/ChurchCalendar/')) {
-        return rawUrl;
-    }
-
-    // 若僅傳入參數 (如 "?date=2026-08-20" 或 "index.html?date=2026-08-20")
-    if (rawUrl.startsWith('?') || rawUrl.startsWith('index.html')) {
-        const queryStr = rawUrl.includes('?') ? rawUrl.substring(rawUrl.indexOf('?')) : '';
-        return SITE_BASE_URL + queryStr;
-    }
-
-    // 若被誤切割成根網域 (https://ccagkc.github.io/?date=...)，重新拼接專案路徑
-    if (rawUrl.includes('ccagkc.github.io') && !rawUrl.includes('/ChurchCalendar/')) {
-        const queryStr = rawUrl.includes('?') ? rawUrl.substring(rawUrl.indexOf('?')) : '';
-        return SITE_BASE_URL + queryStr;
-    }
-
-    // 其他相對路徑處理
-    return SITE_BASE_URL + (rawUrl.startsWith('/') ? rawUrl.substring(1) : rawUrl);
-}
-
 // ==========================================
 // 1. Firebase 推播引擎 (FCM)
 // ==========================================
@@ -59,11 +32,10 @@ messaging.onBackgroundMessage((payload) => {
 
     // 擷取 Custom Data 中的 url 或 fcmOptions.link
     const rawUrl = payload.data?.url || payload.fcmOptions?.link;
-    const targetUrl = sanitizeTargetUrl(rawUrl);
 
     // 🛑 若 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，跳過手動以防重複
     if (payload.notification) {
-        console.log('[SW] ℹ️ 系統已自動渲染 Notification，已綁定點擊目標網址：', targetUrl);
+        console.log('[SW] ℹ️ 系統已自動渲染 Notification，已綁定點擊目標網址：', rawUrl);
         return;
     }
 
@@ -74,7 +46,7 @@ messaging.onBackgroundMessage((payload) => {
         icon: './icon-192.png',
         badge: './icon-192.png',
         data: {
-            url: targetUrl
+            url: rawUrl
         }
     };
 
@@ -91,7 +63,7 @@ self.addEventListener('notificationclick', (event) => {
     const rawUrl = notificationData.url || notificationData.link;
 
     if (rawUrl) {
-        targetUrl = sanitizeTargetUrl(rawUrl);
+        targetUrl = rawUrl;
     }
 
     console.log('[SW] 🔗 點擊推播通知，精準導向至：', targetUrl);
@@ -118,7 +90,7 @@ self.addEventListener('notificationclick', (event) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_6';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_7';
 const STATIC_ASSETS = [
     './',
     './index.html',
