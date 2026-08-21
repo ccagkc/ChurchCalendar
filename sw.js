@@ -1,6 +1,9 @@
 // ==========================================
-// 1. Firebase 推播引擎 (FCM)
+// 葵涌堂悅曆 · Service Worker (FCM & PWA)
+// 快取版本: v260821_7 (精簡版：直導 FCM 原始 URL)
 // ==========================================
+
+// 1. 載入 Firebase 9.x+ 相容版 SDK
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
 
@@ -16,32 +19,72 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 💡 關鍵修復：智慧型防重複背景推播監聽器
+// ==========================================
+// 1. Firebase 推播引擎 (FCM)
+// ==========================================
+
+// 💡 背景推播監聽器 (防重複 + 綁定原始目標網址)
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 🛑 核心邏輯：如果 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，sw.js 直接 return 避免重複！
+    // 直接提取原始 url 或 link 數值，不做任何字串修改
+    const targetUrl = payload.data?.url || payload.fcmOptions?.link || '';
+
+    // 🛑 若 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，跳過手動以防重複
     if (payload.notification) {
-        console.log('[SW] ℹ️ 系統已自動渲染 Notification，跳過手動 showNotification 以防重複。');
+        console.log('[SW] ℹ️ 系統已自動渲染 Notification，已記錄原始目標網址：', targetUrl);
         return;
     }
 
-    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，才由 sw.js 手動觸發通知
+    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，由 sw.js 手動觸發通知
     const title = payload.data?.title || '葵涌堂悅曆';
     const options = {
         body: payload.data?.body || '您有一則新動態',
         icon: './icon-192.png',
         badge: './icon-192.png',
-        data: payload.data || {}
+        data: {
+            url: targetUrl
+        }
     };
 
     self.registration.showNotification(title, options);
 });
 
+// 💡 關鍵新增：點擊通知攔截器 (直接跳轉 FCM 帶入的原始 url 值)
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close(); // 1. 關閉通知橫幅
+
+    // 2. 取得原始網址，完全不做任何格式或路徑修飾
+    const notificationData = event.notification.data || {};
+    const targetUrl = notificationData.url || notificationData.link;
+
+    console.log('[SW] 🔗 點擊推播通知，直接導向原始 URL：', targetUrl);
+
+    // 3. 若網址存在，執行開啓/導向動作
+    if (targetUrl) {
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+                // 若已有開啟的瀏覽器視窗，直接導向並切換焦點
+                for (let i = 0; i < clientList.length; i++) {
+                    let client = clientList[i];
+                    if ('navigate' in client && 'focus' in client) {
+                        client.navigate(targetUrl);
+                        return client.focus();
+                    }
+                }
+                // 若無開啟中的視窗，在瀏覽器開啓新分頁導向目標網址
+                if (clients.openWindow) {
+                    return clients.openWindow(targetUrl);
+                }
+            })
+        );
+    }
+});
+
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260820_5';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_7';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -78,25 +121,25 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// 💡 關鍵修復：安全攔截與快取過濾
+// 💡 安全攔截與快取過濾 (Network-First 策略)
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // 🛑 安全過濾 1: 只處理 GET 請求 (排除 POST, PUT, DELETE)
+    // 🛑 安全過濾 1: 只處理 GET 請求
     if (req.method !== 'GET') return;
 
-    // 🛑 安全過濾 2: 排除非 http/https 協定 (如 chrome-extension://, blob:)
+    // 🛑 安全過濾 2: 排除非 http/https 協定
     if (!url.protocol.startsWith('http')) return;
 
-    // 🛑 安全過濾 3: 排除 Google Analytics、Firebase Realtime DB 或 WebChannel 動態請求
+    // 🛑 安全過濾 3: 排除 API / Firebase 動態請求
     if (url.hostname.includes('googleapis.com') || 
         url.hostname.includes('firebase') || 
         url.hostname.includes('google-analytics')) {
         return;
     }
 
-    // 🟢 通過安全檢查的 GET 請求：執行 Network-First (網絡優先，失敗退回快取) 策略
+    // 🟢 通過安全檢查的 GET 請求：執行 Network-First
     event.respondWith(
         fetch(req)
             .then((response) => {
