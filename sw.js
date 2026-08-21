@@ -1,9 +1,6 @@
 // ==========================================
-// 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260821_6 (已補齊推播點擊導向與 404 防呆機制)
+// 1. Firebase 推播引擎 (FCM)
 // ==========================================
-
-// 1. 載入 Firebase 9.x+ 相容版 SDK
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
 
@@ -19,78 +16,32 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 💡 專案基底 URL (確保點擊永遠在 ChurchCalendar 子路徑下運作)
-const SITE_BASE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
-
-// ==========================================
-// 1. Firebase 推播引擎 (FCM)
-// ==========================================
-
-// 💡 智慧型背景推播監聽器 (防重複 + 綁定正確導向 URL)
+// 💡 關鍵修復：智慧型防重複背景推播監聽器
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 擷取 Custom Data 中的 url 或 fcmOptions.link
-    const rawUrl = payload.data?.url || payload.fcmOptions?.link;
-
-    // 🛑 若 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，跳過手動以防重複
+    // 🛑 核心邏輯：如果 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，sw.js 直接 return 避免重複！
     if (payload.notification) {
-        console.log('[SW] ℹ️ 系統已自動渲染 Notification，已綁定點擊目標網址：', rawUrl);
+        console.log('[SW] ℹ️ 系統已自動渲染 Notification，跳過手動 showNotification 以防重複。');
         return;
     }
 
-    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，由 sw.js 手動觸發通知
+    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，才由 sw.js 手動觸發通知
     const title = payload.data?.title || '葵涌堂悅曆';
     const options = {
         body: payload.data?.body || '您有一則新動態',
         icon: './icon-192.png',
         badge: './icon-192.png',
-        data: {
-            url: rawUrl
-        }
+        data: payload.data || {}
     };
 
     self.registration.showNotification(title, options);
 });
 
-// 💡 關鍵新增：點擊通知攔截器 (點擊後精準開啟指定 URL 網頁)
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close(); // 1. 點擊後立即關閉通知橫幅
-
-    // 2. 解析目標網址
-    let targetUrl = SITE_BASE_URL;
-    const notificationData = event.notification.data || {};
-    const rawUrl = notificationData.url || notificationData.link;
-
-    if (rawUrl) {
-        targetUrl = rawUrl;
-    }
-
-    console.log('[SW] 🔗 點擊推播通知，精準導向至：', targetUrl);
-
-    // 3. 執行跳轉或切換至已開啟的分頁
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            // 若瀏覽器已開啟 ChurchCalendar 頁面，直接切換 focus 並導向目標 URL
-            for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
-                    client.navigate(targetUrl);
-                    return client.focus();
-                }
-            }
-            // 若未開啟，打開新頁籤/視窗載入目標 URL
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
-            }
-        })
-    );
-});
-
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_7';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260820_5';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -127,25 +78,25 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// 💡 安全攔截與快取過濾 (Network-First 策略)
+// 💡 關鍵修復：安全攔截與快取過濾
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // 🛑 安全過濾 1: 只處理 GET 請求
+    // 🛑 安全過濾 1: 只處理 GET 請求 (排除 POST, PUT, DELETE)
     if (req.method !== 'GET') return;
 
-    // 🛑 安全過濾 2: 排除非 http/https 協定
+    // 🛑 安全過濾 2: 排除非 http/https 協定 (如 chrome-extension://, blob:)
     if (!url.protocol.startsWith('http')) return;
 
-    // 🛑 安全過濾 3: 排除 API / Firebase 動態請求
+    // 🛑 安全過濾 3: 排除 Google Analytics、Firebase Realtime DB 或 WebChannel 動態請求
     if (url.hostname.includes('googleapis.com') || 
         url.hostname.includes('firebase') || 
         url.hostname.includes('google-analytics')) {
         return;
     }
 
-    // 🟢 通過安全檢查的 GET 請求：執行 Network-First
+    // 🟢 通過安全檢查的 GET 請求：執行 Network-First (網絡優先，失敗退回快取) 策略
     event.respondWith(
         fetch(req)
             .then((response) => {
