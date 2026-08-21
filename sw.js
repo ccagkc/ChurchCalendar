@@ -41,7 +41,7 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260820_5';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_1';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -95,7 +95,7 @@ self.addEventListener('fetch', (event) => {
         url.hostname.includes('google-analytics')) {
         return;
     }
-
+   
     // 🟢 通過安全檢查的 GET 請求：執行 Network-First (網絡優先，失敗退回快取) 策略
     event.respondWith(
         fetch(req)
@@ -113,5 +113,33 @@ self.addEventListener('fetch', (event) => {
                     return cachedResponse || caches.match('./index.html');
                 });
             })
+    );
+});
+
+// sw.js - Service Worker 點擊攔截處理
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close(); // 點擊後關閉通知橫幅
+
+    // 1. 從 FCM payload data 取得目標跳轉網址，預設回首頁
+    const targetUrl = (event.notification.data && event.notification.data.url) 
+                      ? event.notification.data.url 
+                      : 'https://ccagkc.github.io/ChurchCalendar/';
+
+    // 2. 檢查目前瀏覽器是否已經開啟了該月曆分頁，若已開啟則直接切換焦點；若無則開啟新視窗
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+            for (let i = 0; i < clientList.length; i++) {
+                let client = clientList[i];
+                if ('focus' in client) {
+                    // 若已在頁面中，直接導向該日期分頁並聚焦
+                    client.navigate(targetUrl);
+                    return client.focus();
+                }
+            }
+            // 若未開啟，則在瀏覽器開啟新頁籤跳轉至目標分頁
+            if (clients.openWindow) {
+                return clients.openWindow(targetUrl);
+            }
+        })
     );
 });
