@@ -85,29 +85,29 @@ self.addEventListener('notificationclick', (event) => {
     event.notification.close(); // 點擊後關閉通知橫幅
 
     // 嘗試從通知物件的 data 中提取目標網址
-    let targetUrl = SITE_BASE_URL;
-    if (event.notification && event.notification.data && event.notification.data.url) {
-        targetUrl = sanitizeTargetUrl(event.notification.data.url);
+    // let targetUrl = SITE_BASE_URL;
+    // if (event.notification && event.notification.data && event.notification.data.url) {
+    //    targetUrl = sanitizeTargetUrl(event.notification.data.url);
     }
 
-    console.log('[SW] 🔗 點擊推播通知，準備精準導向至：', targetUrl);
+    // console.log('[SW] 🔗 點擊推播通知，準備精準導向至：', targetUrl);
 
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    // event.waitUntil(
+    //    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             // 檢查瀏覽器是否已開啟 ChurchCalendar 頁面
-            for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
-                    client.navigate(targetUrl);
-                    return client.focus();
-                }
-            }
-            // 若尚未開啟，打開新頁籤導向完整目標網址
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
-            }
-        })
-    );
+    //        for (let i = 0; i < clientList.length; i++) {
+    //            let client = clientList[i];
+    //            if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
+    //                client.navigate(targetUrl);
+    //                return client.focus();
+    //            }
+    //        }
+    //        // 若尚未開啟，打開新頁籤導向完整目標網址
+    //        if (clients.openWindow) {
+    //            return clients.openWindow(targetUrl);
+    //        }
+    //    })
+    //);
 });
 
 // ==========================================
