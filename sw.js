@@ -30,21 +30,24 @@ const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 🛑 若 Payload 包含 notification 欄位，作業系統已自動顯示通知，直接 return 避免產生雙重通知！
-    if (payload.notification) {
-        return;
-    }
+    // 1. 提取自訂資料中的 url
+    const rawUrl = payload.data?.url || payload.data?.link || payload.fcmOptions?.link || '';
+    
+    // 2. 提取標題與內文
+    const title = payload.notification?.title || payload.data?.title || '葵涌堂悅曆';
+    const body = payload.notification?.body || payload.data?.body || '您有一則新動態';
 
-    // 🟢 僅當發送純 Data 封包時（如來自 API），由 SW 手動發送
-    const title = payload.data?.title || '葵涌堂悅曆';
-    const targetUrl = payload.data?.url || DEFAULT_SITE_URL;
+    // 3. 關鍵修正：將 rawUrl 顯式寫入 data 物件
     const options = {
-        body: payload.data?.body || '您有一則新動態',
+        body: body,
         icon: './icon-192.png',
         badge: './icon-192.png',
-        data: { url: targetUrl }
+        data: {
+            url: rawUrl // 👈 這裡成功將 FCM 的 url 塞入 Notification 物件中！
+        }
     };
 
+    // 4. 由 SW 手動渲染通知 (確保 data 不會丟失)
     self.registration.showNotification(title, options);
 });
 
@@ -86,7 +89,7 @@ self.addEventListener('notificationclick', (event) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_fix_404';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_bc1';
 const STATIC_ASSETS = [
     './',
     './index.html',
