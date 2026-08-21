@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260821_7 (精簡版：直導 FCM 原始 URL)
+// 快取版本: v260821_debug_1 (Debug 專用：通知顯示原始 Hyperlink)
 // ==========================================
 
 // 1. 載入 Firebase 9.x+ 相容版 SDK
@@ -20,51 +20,53 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==========================================
-// 1. Firebase 推播引擎 (FCM)
+// 1. Firebase 推播引擎 (FCM Debug 模式)
 // ==========================================
 
-// 💡 背景推播監聽器 (防重複 + 綁定原始目標網址)
+// 💡 背景推播監聽器：攔截 Payload 並將 URL 顯現於通知內文
 messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
+    console.log('[SW Debug] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 直接提取原始 url 或 link 數值，不做任何字串修改
-    const targetUrl = payload.data?.url || payload.fcmOptions?.link || '';
+    // 1. 提取 FCM Payload 中的原始 url 或 link 數值
+    const rawUrl = payload.data?.url || payload.fcmOptions?.link || payload.data?.link || '(未偵測到 URL)';
 
-    // 🛑 若 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，跳過手動以防重複
-    if (payload.notification) {
-        console.log('[SW] ℹ️ 系統已自動渲染 Notification，已記錄原始目標網址：', targetUrl);
-        return;
-    }
+    // 2. 提取標題與內文
+    const originTitle = payload.notification?.title || payload.data?.title || '葵涌堂悅曆';
+    const originBody = payload.notification?.body || payload.data?.body || '您有一則新動態';
 
-    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，由 sw.js 手動觸發通知
-    const title = payload.data?.title || '葵涌堂悅曆';
+    // 3. 組合 Debug 顯示文字 (把將要跳轉的 Hyperlink 直接寫入內文)
+    const debugTitle = `[Debug] ${originTitle}`;
+    const debugBody = `${originBody}\n🔗 導向網址: ${rawUrl}`;
+
     const options = {
-        body: payload.data?.body || '您有一則新動態',
+        body: debugBody,
         icon: './icon-192.png',
         badge: './icon-192.png',
+        // 將原始網址帶入 data 物件供點擊觸發時讀取
         data: {
-            url: targetUrl
+            url: rawUrl
         }
     };
 
-    self.registration.showNotification(title, options);
+    // 強制手動彈出包含 Debug 資訊的通知橫幅
+    self.registration.showNotification(debugTitle, options);
 });
 
-// 💡 關鍵新增：點擊通知攔截器 (直接跳轉 FCM 帶入的原始 url 值)
+// 💡 點擊通知攔截器 (直接導向 FCM 帶入的原始 url 值)
 self.addEventListener('notificationclick', (event) => {
     event.notification.close(); // 1. 關閉通知橫幅
 
-    // 2. 取得原始網址，完全不做任何格式或路徑修飾
+    // 2. 讀取綁定在 notification.data 中的原始 URL
     const notificationData = event.notification.data || {};
-    const targetUrl = notificationData.url || notificationData.link;
+    const targetUrl = notificationData.url;
 
-    console.log('[SW] 🔗 點擊推播通知，直接導向原始 URL：', targetUrl);
+    console.log('[SW Debug] 🔗 點擊推播通知，準備導向原始 URL：', targetUrl);
 
-    // 3. 若網址存在，執行開啓/導向動作
-    if (targetUrl) {
+    // 3. 執行跳轉 (若 URL 有效且非提示字串)
+    if (targetUrl && targetUrl !== '(未偵測到 URL)') {
         event.waitUntil(
             clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-                // 若已有開啟的瀏覽器視窗，直接導向並切換焦點
+                // 若已開啟瀏覽器頁面，直接導向該網址並聚焦
                 for (let i = 0; i < clientList.length; i++) {
                     let client = clientList[i];
                     if ('navigate' in client && 'focus' in client) {
@@ -72,7 +74,7 @@ self.addEventListener('notificationclick', (event) => {
                         return client.focus();
                     }
                 }
-                // 若無開啟中的視窗，在瀏覽器開啓新分頁導向目標網址
+                // 若未開啟，開啓新頁籤導向目標 URL
                 if (clients.openWindow) {
                     return clients.openWindow(targetUrl);
                 }
@@ -84,7 +86,7 @@ self.addEventListener('notificationclick', (event) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_7';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_debug_1';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -121,25 +123,20 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// 💡 安全攔截與快取過濾 (Network-First 策略)
+// 安全攔截與快取過濾 (Network-First 策略)
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // 🛑 安全過濾 1: 只處理 GET 請求
     if (req.method !== 'GET') return;
-
-    // 🛑 安全過濾 2: 排除非 http/https 協定
     if (!url.protocol.startsWith('http')) return;
 
-    // 🛑 安全過濾 3: 排除 API / Firebase 動態請求
     if (url.hostname.includes('googleapis.com') || 
         url.hostname.includes('firebase') || 
         url.hostname.includes('google-analytics')) {
         return;
     }
 
-    // 🟢 通過安全檢查的 GET 請求：執行 Network-First
     event.respondWith(
         fetch(req)
             .then((response) => {
