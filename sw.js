@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260821_debug_1 (Debug 專用：通知顯示原始 Hyperlink)
+// 快取版本: v260821_fix_404 (徹底解決系統預設通知 404 錯誤)
 // ==========================================
 
 // 1. 載入 Firebase 9.x+ 相容版 SDK
@@ -19,74 +19,74 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 💡 專案正確保底網址
+const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
+
 // ==========================================
-// 1. Firebase 推播引擎 (FCM Debug 模式)
+// 1. Firebase 推播引擎 (FCM)
 // ==========================================
 
-// 💡 背景推播監聽器：攔截 Payload 並將 URL 顯現於通知內文
+// 背景推播監聽器
 messaging.onBackgroundMessage((payload) => {
-    console.log('[SW Debug] 🚨 攔截到背景推播 Payload: ', payload);
+    console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 1. 提取 FCM Payload 中的原始 url 或 link 數值
-    const rawUrl = payload.data?.url || payload.fcmOptions?.link || payload.data?.link || '(未偵測到 URL)';
+    // 🛑 若 Payload 包含 notification 欄位，作業系統已自動顯示通知，直接 return 避免產生雙重通知！
+    if (payload.notification) {
+        return;
+    }
 
-    // 2. 提取標題與內文
-    const originTitle = payload.notification?.title || payload.data?.title || '葵涌堂悅曆';
-    const originBody = payload.notification?.body || payload.data?.body || '您有一則新動態';
-
-    // 3. 組合 Debug 顯示文字 (把將要跳轉的 Hyperlink 直接寫入內文)
-    const debugTitle = `[Debug] ${originTitle}`;
-    const debugBody = `${originBody}\n🔗 導向網址: ${rawUrl}`;
-
+    // 🟢 僅當發送純 Data 封包時（如來自 API），由 SW 手動發送
+    const title = payload.data?.title || '葵涌堂悅曆';
+    const targetUrl = payload.data?.url || DEFAULT_SITE_URL;
     const options = {
-        body: debugBody,
+        body: payload.data?.body || '您有一則新動態',
         icon: './icon-192.png',
         badge: './icon-192.png',
-        // 將原始網址帶入 data 物件供點擊觸發時讀取
-        data: {
-            url: rawUrl
-        }
+        data: { url: targetUrl }
     };
 
-    // 強制手動彈出包含 Debug 資訊的通知橫幅
-    self.registration.showNotification(debugTitle, options);
+    self.registration.showNotification(title, options);
 });
 
-// 💡 點擊通知攔截器 (直接導向 FCM 帶入的原始 url 值)
+// 💡 核心保險絲：全域點擊攔截與 404 強制修正引擎
 self.addEventListener('notificationclick', (event) => {
-    event.notification.close(); // 1. 關閉通知橫幅
+    event.notification.close(); // 關閉通知橫幅
 
-    // 2. 讀取綁定在 notification.data 中的原始 URL
+    // 1. 嘗試從通知物件取得自訂 url
     const notificationData = event.notification.data || {};
-    const targetUrl = notificationData.url;
+    let targetUrl = notificationData.url || notificationData.link;
 
-    console.log('[SW Debug] 🔗 點擊推播通知，準備導向原始 URL：', targetUrl);
-
-    // 3. 執行跳轉 (若 URL 有效且非提示字串)
-    if (targetUrl && targetUrl !== '(未偵測到 URL)') {
-        event.waitUntil(
-            clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-                // 若已開啟瀏覽器頁面，直接導向該網址並聚焦
-                for (let i = 0; i < clientList.length; i++) {
-                    let client = clientList[i];
-                    if ('navigate' in client && 'focus' in client) {
-                        client.navigate(targetUrl);
-                        return client.focus();
-                    }
-                }
-                // 若未開啟，開啓新頁籤導向目標 URL
-                if (clients.openWindow) {
-                    return clients.openWindow(targetUrl);
-                }
-            })
-        );
+    // 2. 🛡️ 核心防呆：若點擊的是系統自動產生的通知（無 url），或是被瀏覽器預設轉向至根網域
+    if (!targetUrl || targetUrl === 'https://ccagkc.github.io/' || targetUrl === 'https://ccagkc.github.io') {
+        console.warn('[SW] ⚠️ 偵測到系統預設空網址/根網域，強制校正導向至 ChurchCalendar 子目錄！');
+        targetUrl = DEFAULT_SITE_URL;
     }
+
+    console.log('[SW] 🔗 最終安全導向網址：', targetUrl);
+
+    // 3. 執行網頁開啓與切換
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
+            for (let i = 0; i < clientList.length; i++) {
+                let client = clientList[i];
+                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
+                    client.navigate(targetUrl);
+                    return client.focus();
+                }
+            }
+            // 若未開啟，開啓新頁籤導向正確網址
+            if (clients.openWindow) {
+                return clients.openWindow(targetUrl);
+            }
+        })
+    );
 });
 
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_debug_1';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_fix_404';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -95,27 +95,19 @@ const STATIC_ASSETS = [
     './icon-192.png'
 ];
 
-// 安裝 Service Worker
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            console.log('[SW] 📦 靜態資源快取成功');
-            return cache.addAll(STATIC_ASSETS);
-        })
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
     );
     self.skipWaiting();
 });
 
-// 啟動與清理舊快取
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) => {
             return Promise.all(
                 keys.map((key) => {
-                    if (key !== CACHE_NAME) {
-                        console.log('[SW] 🧹 清除舊快取:', key);
-                        return caches.delete(key);
-                    }
+                    if (key !== CACHE_NAME) return caches.delete(key);
                 })
             );
         })
@@ -123,35 +115,22 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// 安全攔截與快取過濾 (Network-First 策略)
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    if (req.method !== 'GET') return;
-    if (!url.protocol.startsWith('http')) return;
-
-    if (url.hostname.includes('googleapis.com') || 
-        url.hostname.includes('firebase') || 
-        url.hostname.includes('google-analytics')) {
-        return;
-    }
+    if (req.method !== 'GET' || !url.protocol.startsWith('http')) return;
+    if (url.hostname.includes('googleapis.com') || url.hostname.includes('firebase') || url.hostname.includes('google-analytics')) return;
 
     event.respondWith(
         fetch(req)
             .then((response) => {
                 if (response && response.status === 200 && response.type === 'basic') {
                     const responseToCache = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(req, responseToCache);
-                    });
+                    caches.open(CACHE_NAME).then((cache) => cache.put(req, responseToCache));
                 }
                 return response;
             })
-            .catch(() => {
-                return caches.match(req).then((cachedResponse) => {
-                    return cachedResponse || caches.match('./index.html');
-                });
-            })
+            .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
     );
 });
