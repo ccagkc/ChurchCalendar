@@ -53,43 +53,65 @@ messaging.onBackgroundMessage((payload) => {
 
 // 💡 核心保險絲：全域點擊攔截與 404 強制修正引擎
 self.addEventListener('notificationclick', (event) => {
-    event.notification.close(); // 關閉通知橫幅
+    event.notification.close(); // 關閉原本的通知
 
-    // 1. 嘗試從通知物件取得自訂 url
+    // 1. 此時 event.notification.data100% 存在，因為階段 1 已經手動寫入！
     const notificationData = event.notification.data || {};
-    let targetUrl = notificationData.url || notificationData.link;
+    const rawUrl = notificationData.url;
 
-    // 2. 🛡️ 核心防呆：若點擊的是系統自動產生的通知（無 url），或是被瀏覽器預設轉向至根網域
-    if (!targetUrl || targetUrl === 'https://ccagkc.github.io/' || targetUrl === 'https://ccagkc.github.io') {
-        console.warn('[SW] ⚠️ 偵測到系統預設空網址/根網域，強制校正導向至 ChurchCalendar 子目錄！');
-        targetUrl = DEFAULT_SITE_URL;
+    let targetUrl = DEFAULT_SITE_URL;
+
+    // 2. 進行嚴謹解析
+    if (rawUrl && typeof rawUrl === 'string') {
+        const trimmedUrl = rawUrl.trim();
+
+        if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
+            if (trimmedUrl !== 'https://ccagkc.github.io/' && trimmedUrl !== 'https://ccagkc.github.io') {
+                targetUrl = trimmedUrl;
+            }
+        } else if (trimmedUrl.startsWith('?')) {
+            targetUrl = DEFAULT_SITE_URL + trimmedUrl;
+        }
     }
 
-    console.log('[SW] 🔗 最終安全導向網址：', targetUrl);
+    console.log('[SW] 🔗 最終成功擷取並解析導向 URL：', targetUrl);
 
-    // 3. 執行網頁開啓與切換
+    // 3. 顯示偵測結果 (不開啟網頁)
+    const debugTitle = '🔍 FCM URL 偵錯成功';
+    const debugBody = `FCM 原始接收: ${rawUrl || '(空值)'}\n最終解析網址: ${targetUrl}`;
+
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
-            for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
-                    client.navigate(targetUrl);
-                    return client.focus();
-                }
-            }
-            // 若未開啟，開啓新頁籤導向正確網址
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
-            }
+        self.registration.showNotification(debugTitle, {
+            body: debugBody,
+            icon: './icon-192.png',
+            badge: './icon-192.png'
         })
     );
 });
+    
+    // 3. 執行網頁開啓與切換
+ //   event.waitUntil(
+ //       clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+ //           // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
+ //           for (let i = 0; i < clientList.length; i++) {
+ //               let client = clientList[i];
+ //               if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
+ //                   client.navigate(targetUrl);
+ //                   return client.focus();
+ //               }
+ //           }
+ //           // 若未開啟，開啓新頁籤導向正確網址
+ //           if (clients.openWindow) {
+ //               return clients.openWindow(targetUrl);
+ //           }
+ //       })
+ //   );
+//});
 
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_bc1';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_bc2';
 const STATIC_ASSETS = [
     './',
     './index.html',
