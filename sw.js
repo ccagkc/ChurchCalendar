@@ -1,6 +1,9 @@
 // ==========================================
-// 1. Firebase 推播引擎 (FCM)
+// 葵涌堂悅曆 · Service Worker (FCM & PWA)
+// 快取版本: v260821_1 (已修復推播點擊跳轉與子路徑 404 防呆)
 // ==========================================
+
+// 1. 載入 Firebase 9.x+ 相容版 SDK
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
 
@@ -16,32 +19,101 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 💡 關鍵修復：智慧型防重複背景推播監聽器
+// 💡 全域專案基底 URL (確保點擊永遠在 ChurchCalendar 子路徑下運作)
+const SITE_BASE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
+
+/**
+ * 🛠️ 輔助函式：URL 規格化修復器 (自動修復缺漏的子路徑，徹底告別 404)
+ */
+function sanitizeTargetUrl(rawUrl) {
+    if (!rawUrl) return SITE_BASE_URL;
+    
+    // 若傳入的是完整的正確網址，直接回傳
+    if (rawUrl.startsWith('https://ccagkc.github.io/ChurchCalendar/')) {
+        return rawUrl;
+    }
+    
+    // 若僅傳入參數 (如 "?date=2026-08-21" 或 "index.html?date=2026-08-21")
+    if (rawUrl.startsWith('?') || rawUrl.startsWith('index.html')) {
+        const queryStr = rawUrl.includes('?') ? rawUrl.substring(rawUrl.indexOf('?')) : '';
+        return SITE_BASE_URL + queryStr;
+    }
+
+    // 若被誤切割成根網域 (https://ccagkc.github.io/?date=...)，重新拼接專案路徑
+    if (rawUrl.includes('ccagkc.github.io') && !rawUrl.includes('/ChurchCalendar/')) {
+        const queryStr = rawUrl.includes('?') ? rawUrl.substring(rawUrl.indexOf('?')) : '';
+        return SITE_BASE_URL + queryStr;
+    }
+
+    return SITE_BASE_URL;
+}
+
+// ==========================================
+// 1. Firebase 推播引擎 (FCM) 接收與點擊處理
+// ==========================================
+
+// 💡 智慧型背景推播監聽器 (防重複 + 綁定正確導向 URL)
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 🛑 核心邏輯：如果 Payload 包含 notification 欄位，系統層級已自動跳出橫幅，sw.js 直接 return 避免重複！
+    // 擷取 Custom Data 中的 url 或 fcmOptions.link
+    const rawUrl = payload.data?.url || payload.fcmOptions?.link;
+    const targetUrl = sanitizeTargetUrl(rawUrl);
+
+    // 🛑 若 Payload 包含 notification 欄位，系統已自動渲染橫幅，但我們需要補充點擊事件資料
     if (payload.notification) {
-        console.log('[SW] ℹ️ 系統已自動渲染 Notification，跳過手動 showNotification 以防重複。');
+        console.log('[SW] ℹ️ 系統已自動渲染橫幅，已記錄點擊目標網址：', targetUrl);
         return;
     }
 
-    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，才由 sw.js 手動觸發通知
-    const title = payload.data?.title || '葵涌堂悅曆';
+    // 🟢 僅當發送純 data 封包（無 notification 欄位）時，由 sw.js 手動觸發通知
+    const title = payload.data?.title || '🕊️ 葵涌堂每日靈修';
     const options = {
-        body: payload.data?.body || '您有一則新動態',
+        body: payload.data?.body || '今日讀經進度已更新，點擊即刻閱讀。',
         icon: './icon-192.png',
         badge: './icon-192.png',
-        data: payload.data || {}
+        data: {
+            url: targetUrl
+        }
     };
 
     self.registration.showNotification(title, options);
 });
 
+// 💡 關鍵新增：點擊通知攔截器 (攔截點擊並精準跳轉至當天讀經分頁)
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close(); // 點擊後關閉通知橫幅
+
+    // 嘗試從通知物件的 data 中提取目標網址
+    let targetUrl = SITE_BASE_URL;
+    if (event.notification && event.notification.data && event.notification.data.url) {
+        targetUrl = sanitizeTargetUrl(event.notification.data.url);
+    }
+
+    console.log('[SW] 🔗 點擊推播通知，準備精準導向至：', targetUrl);
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // 檢查瀏覽器是否已開啟 ChurchCalendar 頁面
+            for (let i = 0; i < clientList.length; i++) {
+                let client = clientList[i];
+                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
+                    client.navigate(targetUrl);
+                    return client.focus();
+                }
+            }
+            // 若尚未開啟，打開新頁籤導向完整目標網址
+            if (clients.openWindow) {
+                return clients.openWindow(targetUrl);
+            }
+        })
+    );
+});
+
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_1';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260821_2';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -78,25 +150,20 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// 💡 關鍵修復：安全攔截與快取過濾
+// 安全攔截與快取過濾 (Network-First 策略)
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // 🛑 安全過濾 1: 只處理 GET 請求 (排除 POST, PUT, DELETE)
     if (req.method !== 'GET') return;
-
-    // 🛑 安全過濾 2: 排除非 http/https 協定 (如 chrome-extension://, blob:)
     if (!url.protocol.startsWith('http')) return;
 
-    // 🛑 安全過濾 3: 排除 Google Analytics、Firebase Realtime DB 或 WebChannel 動態請求
     if (url.hostname.includes('googleapis.com') || 
         url.hostname.includes('firebase') || 
         url.hostname.includes('google-analytics')) {
         return;
     }
-   
-    // 🟢 通過安全檢查的 GET 請求：執行 Network-First (網絡優先，失敗退回快取) 策略
+
     event.respondWith(
         fetch(req)
             .then((response) => {
@@ -113,33 +180,5 @@ self.addEventListener('fetch', (event) => {
                     return cachedResponse || caches.match('./index.html');
                 });
             })
-    );
-});
-
-// sw.js - Service Worker 點擊攔截處理
-self.addEventListener('notificationclick', function(event) {
-    event.notification.close(); // 點擊後關閉通知橫幅
-
-    // 1. 從 FCM payload data 取得目標跳轉網址，預設回首頁
-    const targetUrl = (event.notification.data && event.notification.data.url) 
-                      ? event.notification.data.url 
-                      : 'https://ccagkc.github.io/ChurchCalendar/';
-
-    // 2. 檢查目前瀏覽器是否已經開啟了該月曆分頁，若已開啟則直接切換焦點；若無則開啟新視窗
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-            for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if ('focus' in client) {
-                    // 若已在頁面中，直接導向該日期分頁並聚焦
-                    client.navigate(targetUrl);
-                    return client.focus();
-                }
-            }
-            // 若未開啟，則在瀏覽器開啟新頁籤跳轉至目標分頁
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
-            }
-        })
     );
 });
