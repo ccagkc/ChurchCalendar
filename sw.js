@@ -29,11 +29,6 @@ const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 🛑 避免雙重通知：若 Payload 包含 notification，系統已自動繪製橫幅，SW 靜默退出
-    if (payload.notification) {
-        return;
-    }
-
     // 🟢 純 Data 封包：由 SW 手動繪製通知，並將 url 綁定入 data 物件
     const rawUrl = payload.data?.url || payload.data?.link || '';
     const title = payload.data?.title || '葵涌堂悅曆';
@@ -80,7 +75,7 @@ self.addEventListener('notificationclick', (event) => {
     }
 
     // 🛑 核心分支點：若 Data 為空或未能解析出有效 targetUrl，直接結束，不開啟任何網頁！
-    if (!rawUrl) {
+    if (!notificationData) {
         console.log('[SW] ℹ️ FCM Data 為空或無有效 URL，點擊後已關閉通知，不開啓網頁。');
         return;
     }
