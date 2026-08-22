@@ -473,27 +473,31 @@
                             if (snap.exists()) setAppSettings(snap.data());
                         });
 
-                        // 🟢 新增：實時監聽 Firestore 推播歷史紀錄 (最新訊息置頂)
-                        const notifCol = dbModule.collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
-                        const notifQuery = dbModule.query(notifCol, dbModule.orderBy('createdAt', 'desc'));
-                        unsubscribeNotif.current = dbModule.onSnapshot(notifQuery, (snapshot) => {
-                            const list = [];
-                            snapshot.forEach(doc => {
-                                list.push({ id: doc.id, ...doc.data() });
-                            });
-                            setNotificationsList(list);
-                        }, (err) => {
-                            console.warn("獲取歷史通知失敗，準備自動建立權限索引...", err);
-                        });
-                
+                        // 🟢 新增：實時監聽 Firestore 推播歷史紀錄 (最新訊息置頂)                                               
+                        // ✅ 完整替換貼上：只有已登入才讀取通告的安全監聽器
                         unsubscribeAuth = authModule.onAuthStateChanged(auth, (user) => {
                             if (unsubscribeProfile.current) unsubscribeProfile.current();
                             if (unsubscribeProgress.current) unsubscribeProgress.current();
-                
+                            if (unsubscribeNotif.current) unsubscribeNotif.current(); // 🟢 登出或切換帳號時，先取消舊監聽
+                        
                             if (user) {
                                 setCurrentUser(user);
                                 if (user.email.endsWith(SITE_CONFIG.adminEmailDomain) && view !== 'admin-dashboard') setView('admin-dashboard');
                                 
+                                // 🟢 1. 只有已登入會友，才對 Firestore 發起歷史通告監聽
+                                const notifCol = dbModule.collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
+                                const notifQuery = dbModule.query(notifCol, dbModule.orderBy('createdAt', 'desc'));
+                                unsubscribeNotif.current = dbModule.onSnapshot(notifQuery, (snapshot) => {
+                                    const list = [];
+                                    snapshot.forEach(doc => {
+                                        list.push({ id: doc.id, ...doc.data() });
+                                    });
+                                    setNotificationsList(list);
+                                }, (err) => {
+                                    console.warn("獲取歷史通知失敗:", err);
+                                });
+                        
+                                // 2. 個人檔案監聽
                                 const profileRef = dbModule.doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
                                 unsubscribeProfile.current = dbModule.onSnapshot(profileRef, (snap) => {
                                     if (snap.exists()) {
@@ -504,7 +508,8 @@
                                         setUserProfile({ username: user.email.split('@')[0], role: 'admin' });
                                     }
                                 });
-                
+                        
+                                // 3. 個人讀經進度監聽
                                 const progressRef = dbModule.doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'progress');
                                 unsubscribeProgress.current = dbModule.onSnapshot(progressRef, (docSnap) => {
                                     let cloudDates = docSnap.exists() ? (docSnap.data().completedDates || []) : [];
@@ -522,11 +527,16 @@
                                     setCompleted(cloudDates);
                                     localStorage.setItem(userLocalKey, JSON.stringify(cloudDates));
                                 });
-
+                        
                                 autoSilentTokenRefresh(user, fbObj);
-
+                        
                             } else {
-                                setCurrentUser(null); setUserProfile(null); setPushSubscribed(false);
+                                // 🟢 4. 未登入訪客：清空所有個人資料與通告資料
+                                setCurrentUser(null);
+                                setUserProfile(null);
+                                setPushSubscribed(false);
+                                setNotificationsList([]); // 清空通告，防範資訊外洩
+                                
                                 const guestSaved = localStorage.getItem(getLocalKey(null));
                                 setCompleted(guestSaved ? JSON.parse(guestSaved) : []); 
                                 if (!new URLSearchParams(window.location.search).get('date')) goToCalendar();
@@ -1362,20 +1372,27 @@
                             </div>
                             
                             <div className="flex items-center gap-2">
-                                {/* 🟢 新增：歷史通知訊息牆按鈕 (預設永遠顯示) */}
+                                {/* 🟢 新增：歷史通知訊息牆按鈕 */}
                                 <button 
-                                    onClick={() => setView('notifications')} 
+                                    onClick={() => {
+                                        if (!currentUser) {
+                                            alert('請先登入帳號以查閱全教會通告與訊息。');
+                                            setShowAuthModal(true);
+                                        } else {
+                                            setView('notifications');
+                                        }
+                                    }} 
                                     className={`relative p-2.5 rounded-full transition ${view === 'notifications' ? 'bg-nature-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
                                     title="訊息中心"
                                 >
                                     <i className="fa-solid fa-bell text-base md:text-lg"></i>
-                                    {notificationsList.length > 0 && (
+                                    {currentUser && notificationsList.length > 0 && (
                                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                                             {notificationsList.length}
                                         </span>
                                     )}
-                                </button>
-
+                                </button>                                           
+                                                                
                                 {fb && currentUser ? (
                                     <div className="group relative z-50">
                                         <button className="flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm bg-emerald-50 text-emerald-800 border-emerald-300 relative z-50">
