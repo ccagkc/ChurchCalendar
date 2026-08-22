@@ -1,23 +1,34 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260822_bc11
+// 快取版本: v260822_bc12
 // ==========================================
 
 const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 
 // ⭐ 1. 最優先註冊 notificationclick（必須在 firebase.messaging() 之前）
-//    這樣才能正確處理你在 onBackgroundMessage 裡 showNotification 出來的通知
+//    攔截 Firebase SDK 的 click，改由我們開啟原始封包裡的自訂 url
 self.addEventListener('notificationclick', (event) => {
-    // 無論如何先關閉橫幅
+    // 1. 關閉橫幅
     event.notification.close();
 
-    // 阻止 Firebase SDK 自己的 click 處理（避免被強制開啟錯誤網址）
+    // 2. 阻止 Firebase SDK 自己的 click 處理（避免開到錯誤網址）
     event.stopImmediatePropagation();
 
-    const notificationData = event.notification.data || {};
-    const rawUrl = notificationData.url || notificationData.link || '';
+    const data = event.notification.data || {};
 
-    // 沒有傳入任何 url / link → 只關閉，不開網頁
+    // 3. 盡可能從各種可能位置取出自訂 url
+    //    - 你自己放的 data.url / data.link
+    //    - Firebase 內部 FCM_MSG 結構
+    const rawUrl =
+        data.url ||
+        data.link ||
+        data.FCM_MSG?.data?.url ||
+        data.FCM_MSG?.data?.link ||
+        data.FCM_MSG?.fcmOptions?.link ||
+        data.FCM_MSG?.notification?.click_action ||
+        '';
+
+    // 沒有任何 url → 只關閉，不開網頁
     if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
         console.log('[SW] ℹ️ 無有效 URL，點擊後只關閉通知');
         return;
@@ -26,14 +37,13 @@ self.addEventListener('notificationclick', (event) => {
     let targetUrl = null;
     const cleanedUrl = rawUrl.trim();
 
-    // 解析 URL
+    // 4. 解析 URL（沿用你原本邏輯）
     if (cleanedUrl.startsWith('?')) {
-        // 相對 query，補上預設網址
         targetUrl = DEFAULT_SITE_URL + cleanedUrl;
     } else if (cleanedUrl.startsWith('http://') || cleanedUrl.startsWith('https://')) {
         try {
             const parsedUrl = new URL(cleanedUrl);
-            // 只允許本專案網域 + 包含 ChurchCalendar 路徑，避免開到 404
+            // 只允許本專案網域 + 包含 ChurchCalendar，避免 404
             if (parsedUrl.hostname === 'ccagkc.github.io' &&
                 parsedUrl.pathname.includes('ChurchCalendar')) {
                 targetUrl = parsedUrl.href;
@@ -43,7 +53,6 @@ self.addEventListener('notificationclick', (event) => {
         }
     }
 
-    // 解析後仍無有效 targetUrl → 只關閉
     if (!targetUrl) {
         console.log('[SW] ℹ️ 無法解析出有效目標網址，只關閉通知');
         return;
@@ -51,20 +60,17 @@ self.addEventListener('notificationclick', (event) => {
 
     console.log('[SW] 🔗 開啟目標：', targetUrl);
 
-    // 有有效 URL 才執行開啟 / focus
+    // 5. 有有效 URL 才開啟 / focus
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            // 優先 focus 已開啟且包含 ChurchCalendar 的分頁
             for (const client of clientList) {
                 if (client.url && client.url.includes('ChurchCalendar') && 'focus' in client) {
-                    // 可選：若支援 navigate 就導向目標網址
                     if ('navigate' in client) {
                         client.navigate(targetUrl);
                     }
                     return client.focus();
                 }
             }
-            // 沒有已開啟的分頁 → 開新視窗
             if (clients.openWindow) {
                 return clients.openWindow(targetUrl);
             }
@@ -88,28 +94,18 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 3. 背景推播：自己重新包裝並顯示通知
+// 3. 背景推播：不再自己 showNotification
+//    讓 Firebase SDK 顯示原始 notification，我們只在 click 時接手
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
-
-    const rawUrl = payload.data?.url || payload.data?.link || '';
-    const title  = payload.data?.title || payload.notification?.title || '葵涌堂悅曆';
-    const body   = payload.data?.body  || payload.notification?.body  || '您有一則新動態';
-
-    const options = {
-        body: body,
-        icon: './icon-192.png',
-        badge: './icon-192.png',
-        data: { url: rawUrl }   // 這裡放的 data 會在 notificationclick 被讀到
-    };
-
-    self.registration.showNotification(title, options);
+    // ⚠️ 刻意不呼叫 self.registration.showNotification()
+    //    避免產生第二則通知
 });
 
 // ==========================================
-// 4. PWA 離線快取（保持原樣）
+// 4. PWA 離線快取
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260822_bc11';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260822_bc12';
 const STATIC_ASSETS = [
     './',
     './index.html',
