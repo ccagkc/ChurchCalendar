@@ -107,7 +107,8 @@ self.addEventListener('notificationclick', (event) => {
                  return clients.openWindow(targetUrl);
              }
          });
-     });
+    }
+  );
 });
 
 // ==========================================
