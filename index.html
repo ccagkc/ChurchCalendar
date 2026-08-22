@@ -164,11 +164,6 @@
                 .filter(obj => obj['日期']);
         };
         
-        // 回傳結構：
-        // {
-        //   dataByDate: { '2026-08-22': { bible: {...}, event: [...], devotion: {...} } },
-        //   allDates: ['2026-08-01', '2026-08-02', ...]
-        // }
         const loadAllContent = async () => {
             const dataByDate = {};
             const dateSet = new Set();
@@ -195,8 +190,6 @@
             return { dataByDate, allDates };
         };
 
-        // END ~ 內容類型設定表
-        
         const getLocalKey = (uid = null) => uid ? `${SITE_CONFIG.storageKey}-${uid}` : `${SITE_CONFIG.storageKey}-guest`;
         
         const formatDate = (dateObj) => {
@@ -258,9 +251,12 @@
             
             const [devotionModalOpen, setDevotionModalOpen] = useState(false);
 
-            const [dataByDate, setDataByDate] = useState({});   // { '2026-08-22': { bible, event, devotion } }
-            const [allDates, setAllDates] = useState([]);       // 所有有內容的日期（排序後）
+            const [dataByDate, setDataByDate] = useState({});   
+            const [allDates, setAllDates] = useState([]);       
             
+            // 🟢 新增：歷史通知訊息中心 State
+            const [notificationsList, setNotificationsList] = useState([]);
+
             const [completed, setCompleted] = useState(() => {
                 const guestSaved = localStorage.getItem(getLocalKey(null));
                 return guestSaved ? JSON.parse(guestSaved) : [];
@@ -286,8 +282,8 @@
             let unsubscribeProgress = useRef(null);
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
+            let unsubscribeNotif = useRef(null); // 🟢 新增：歷史通知 Unsubscribe Ref
 
-            // 臨時相容：讓舊的 renderReaderView / renderDevotionModal 暫時還能跑
             const data = {};
             const eventData = {};
             const devotionData = {};
@@ -330,12 +326,10 @@
                 }
             };
 
-            // 💡 專家修復：尊重用戶意願的靜默 Token 刷新引擎
             const autoSilentTokenRefresh = async (user, fbObj) => {
                 if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
                 if (!fbObj || !fbObj.messagingModule || !fbObj.messaging || !user) return;
             
-                // 🛑 防禦檢查 1：檢查本機是否記錄了該用戶已手動停用推播
                 if (localStorage.getItem(`kcc_push_disabled_${user.uid}`) === 'true') {
                     console.log('ℹ️ [FCM Engine] 用戶已手動停用推播，跳過背景自動刷新。');
                     return;
@@ -345,7 +339,6 @@
                     const profileRef = fbObj.dbModule.doc(fbObj.db, 'artifacts', fbObj.appId, 'public', 'data', 'userProfiles', user.uid);
                     const profileSnap = await fbObj.dbModule.getDoc(profileRef);
             
-                    // 🛑 防禦檢查 2：若雲端資料庫明確記錄用戶已關閉推播，則不自動覆蓋
                     if (profileSnap.exists() && profileSnap.data().notificationsEnabled === false) {
                         console.log('ℹ️ [FCM Engine] 雲端紀錄顯示推播已關閉，停止靜默綁定。');
                         return;
@@ -372,7 +365,6 @@
                 }
             };
             
-            // 💡 專家修復：跨平台 (PC/Mobile) 雙向推播開關引擎
             const togglePushSubscription = async () => {
                 if (!fb || !fb.messagingModule || !fb.messaging || !currentUser) {
                     alert('請先登入帳號以管理推播通知設定。'); return;
@@ -384,15 +376,12 @@
                 try {
                     if (pushSubscribed) {
                         if (confirm('確定要關閉推播通知嗎？關閉後您將無法收到教會的每日靈修與緊急動態。')) {
-                            
-                            // 1. 雲端資料庫註銷狀態
                             await fb.dbModule.setDoc(profileRef, { 
                                 fcmToken: fb.dbModule.deleteField(), 
                                 notificationsEnabled: false,
                                 lastTokenUpdated: new Date().toISOString()
                             }, { merge: true });
             
-                            // 2. 💡 關鍵新增：記錄本機停用標記，防止重新登入時被靜默刷新覆蓋
                             localStorage.setItem(`kcc_push_disabled_${currentUser.uid}`, 'true');
             
                             try {
@@ -421,7 +410,6 @@
                                     lastTokenUpdated: new Date().toISOString()
                                 }, { merge: true });
             
-                                // 3. 💡 關鍵新增：用戶重新開啟推播時，清除停用標記
                                 localStorage.removeItem(`kcc_push_disabled_${currentUser.uid}`);
             
                                 setPushSubscribed(true);
@@ -484,6 +472,19 @@
                         unsubscribeSettings.current = dbModule.onSnapshot(settingsRef, (snap) => {
                             if (snap.exists()) setAppSettings(snap.data());
                         });
+
+                        // 🟢 新增：實時監聽 Firestore 推播歷史紀錄 (最新訊息置頂)
+                        const notifCol = dbModule.collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
+                        const notifQuery = dbModule.query(notifCol, dbModule.orderBy('createdAt', 'desc'));
+                        unsubscribeNotif.current = dbModule.onSnapshot(notifQuery, (snapshot) => {
+                            const list = [];
+                            snapshot.forEach(doc => {
+                                list.push({ id: doc.id, ...doc.data() });
+                            });
+                            setNotificationsList(list);
+                        }, (err) => {
+                            console.warn("獲取歷史通知失敗，準備自動建立權限索引...", err);
+                        });
                 
                         unsubscribeAuth = authModule.onAuthStateChanged(auth, (user) => {
                             if (unsubscribeProfile.current) unsubscribeProfile.current();
@@ -534,7 +535,7 @@
                         
                         if (messaging) {
                             messagingModule.onMessage(messaging, (payload) => {
-                                alert(`🔔 最新通知: ${payload.notification?.title}\n${payload.notification?.body}`);
+                                alert(`🔔 最新通知: ${payload.notification?.title || payload.data?.title}\n${payload.notification?.body || payload.data?.body}`);
                             });
                         }
 
@@ -547,17 +548,16 @@
                     if (unsubscribeProgress.current) unsubscribeProgress.current(); 
                     if (unsubscribeSettings.current) unsubscribeSettings.current();
                     if (unsubscribeProfile.current) unsubscribeProfile.current();
+                    if (unsubscribeNotif.current) unsubscribeNotif.current();
                 };
             }, []);
 
-            // 💡 新版：統一載入所有 Google Sheet 內容
             useEffect(() => {
                 const load = async () => {
                     try {
                         const urlParams = new URLSearchParams(window.location.search);
                         const urlDate = urlParams.get('date');
 
-                        // 1. 先吃快取（保持原本體驗）
                         const cachedStr = localStorage.getItem(SITE_CONFIG.cacheKey);
                         if (cachedStr) {
                             const cached = JSON.parse(cachedStr);
@@ -573,7 +573,6 @@
                             setLoading(false);
                         }
 
-                        // 2. 背景更新最新資料
                         const { dataByDate: freshData, allDates: freshDates } = await loadAllContent();
 
                         setDataByDate(freshData);
@@ -966,7 +965,6 @@
                                     const hasContent = Object.keys(dayContent).length > 0;
                                     const isDone = completed.includes(dateStr);
                                     
-                                    // 🟢 統一且清晰的樣式計算
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
                                     if (!hasContent) {
                                         btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
@@ -984,7 +982,6 @@
                                             </div>
                                             
                                             <div className="w-full flex flex-col gap-[2px] overflow-hidden">
-                                                {/* 🟢 自動遍歷 CONTENT_TYPES 繪製多分頁標籤 */}
                                                 {Object.entries(CONTENT_TYPES).map(([typeKey, config]) => {
                                                     const dayItem = dayContent[typeKey];
                                                     if (!dayItem) return null;
@@ -1006,14 +1003,12 @@
                                         </button>
                                     );
                                 }))}
-                                
                             </div>
                         </section>
                     </div>
                 );
             };
 
-            // 💡 完全對齊 Perfect_Zero (index_2.html)：包含經文朗讀、Google Doc Iframe、釋義、問題與解答全套模組
             const renderReaderView = () => {
                 const currentData = data[selectedDate] || {}; const currentEvents = eventData[selectedDate] || []; const currentDevotion = devotionData[selectedDate]; 
                 const isPlan = validDates.includes(selectedDate); const isCompleted = completed.includes(selectedDate);
@@ -1186,7 +1181,6 @@
                 );
             };
 
-            // 💡 完全對齊 Perfect_Zero (index_2.html)：靈修 Modal (含圖片、音訊、默想與禱告全欄位)
             const renderDevotionModal = () => {
                 if (!devotionModalOpen || !devotionData[selectedDate]) return null;
                 const dev = devotionData[selectedDate];
@@ -1242,7 +1236,6 @@
                                                 ></iframe>
                                             </div>
                                         ) : (
-                                            /* 💡 關鍵修正：w-full block + min-w-0，保證在 iOS/Android/PC 上按鈕皆能完整展現 */
                                             <audio 
                                                 controls 
                                                 controlsList="nodownload" 
@@ -1290,6 +1283,70 @@
                 );
             };
 
+            // 🟢 新增：歷史通知訊息牆渲染頁面
+            const renderNotificationsView = () => {
+                return (
+                    <div className="max-w-3xl mx-auto w-full animate-fade-in pb-10">
+                        <div className="flex justify-between items-center mb-6">
+                            <button onClick={goToCalendar} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
+                                <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
+                            </button>
+                            <div className="text-slate-800 font-bold text-lg font-serif flex items-center">
+                                <i className="fa-solid fa-box-archive text-nature-600 mr-2"></i> 歷史通告與訊息
+                            </div>
+                        </div>
+
+                        {notificationsList.length === 0 ? (
+                            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 text-slate-400">
+                                <i className="fa-solid fa-bell-slash text-4xl mb-3 block opacity-40"></i>
+                                目前沒有任何已發布的歷史通告。
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {notificationsList.map((item) => {
+                                    const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString('zh-HK', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                                    
+                                    return (
+                                        <article key={item.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:border-nature-300 transition relative overflow-hidden group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h3 className="font-bold text-slate-800 text-lg flex items-center">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-nature-500 mr-2 shrink-0"></span>
+                                                    {item.title || '最新通告'}
+                                                </h3>
+                                                <span className="text-xs font-sans text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full shrink-0">
+                                                    {dateStr}
+                                                </span>
+                                            </div>
+                                            
+                                            <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap pl-4 border-l-2 border-slate-100 my-3">
+                                                {item.body}
+                                            </p>
+
+                                            {item.url && (
+                                                <div className="pt-2 flex justify-end">
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (item.url.startsWith('?date=')) {
+                                                                goToDate(item.url.replace('?date=', ''));
+                                                            } else {
+                                                                window.open(item.url, '_blank');
+                                                            }
+                                                        }}
+                                                        className="text-xs bg-nature-50 text-nature-700 hover:bg-nature-100 font-bold px-4 py-2 rounded-xl transition flex items-center"
+                                                    >
+                                                        開啟相關專頁 <i className="fa-solid fa-arrow-right ml-1.5 text-[10px]"></i>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
             return (
                 <>
                     <AuthModal />
@@ -1304,38 +1361,49 @@
                                 <div><h1 className="text-xl font-bold text-slate-800">{SITE_CONFIG.titleLine2}</h1></div>
                             </div>
                             
-                            {fb && (
-                                <div className="flex items-center gap-2">
-                                    {currentUser ? (
-                                        <div className="group relative z-50">
-                                            <button className="flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm bg-emerald-50 text-emerald-800 border-emerald-300 relative z-50">
-                                                <i className="fa-solid fa-cloud-check"></i> <span>{currentUser.email.split('@')[0]}</span>
-                                            </button>
-                                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden z-50">
-                                                {userProfile?.role === 'admin' && <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>}
-                                                
-                                                {/* 💡 專家級：動態開關推播按鈕 */}
-                                                <button 
-                                                    onClick={togglePushSubscription} 
-                                                    className={`w-full text-left px-4 py-3 text-sm font-bold border-b border-slate-100 flex items-center justify-between transition ${
-                                                        pushSubscribed ? 'text-amber-600 hover:bg-amber-50' : 'text-blue-600 hover:bg-blue-50'
-                                                    }`}
-                                                >
-                                                    <span>
-                                                        <i className={`fa-solid ${pushSubscribed ? 'fa-bell-slash' : 'fa-bell'} mr-2`}></i>
-                                                        {pushSubscribed ? '取消推播通知' : '啟用推播通知'}
-                                                    </span>
-                                                    {pushSubscribed && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">運行中</span>}
-                                                </button>
-
-                                                <button onClick={()=>{ setCompleted([]); setCurrentUser(null); setUserProfile(null); goToCalendar(); fb.authModule.signOut(fb.auth); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-1.5 rounded-full text-xs font-bold"><i className="fa-solid fa-cloud-arrow-up"></i> 登入</button>
+                            <div className="flex items-center gap-2">
+                                {/* 🟢 新增：歷史通知訊息牆按鈕 (預設永遠顯示) */}
+                                <button 
+                                    onClick={() => setView('notifications')} 
+                                    className={`relative p-2.5 rounded-full transition ${view === 'notifications' ? 'bg-nature-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                                    title="訊息中心"
+                                >
+                                    <i className="fa-solid fa-bell text-base md:text-lg"></i>
+                                    {notificationsList.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                                            {notificationsList.length}
+                                        </span>
                                     )}
-                                </div>
-                            )}
+                                </button>
+
+                                {fb && currentUser ? (
+                                    <div className="group relative z-50">
+                                        <button className="flex items-center gap-2 border px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm bg-emerald-50 text-emerald-800 border-emerald-300 relative z-50">
+                                            <i className="fa-solid fa-cloud-check"></i> <span>{currentUser.email.split('@')[0]}</span>
+                                        </button>
+                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all overflow-hidden z-50">
+                                            {userProfile?.role === 'admin' && <button onClick={()=>setView('admin-dashboard')} className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-bold border-b border-slate-100"><i className="fa-solid fa-server mr-2"></i> 進入後台</button>}
+                                            
+                                            <button 
+                                                onClick={togglePushSubscription} 
+                                                className={`w-full text-left px-4 py-3 text-sm font-bold border-b border-slate-100 flex items-center justify-between transition ${
+                                                    pushSubscribed ? 'text-amber-600 hover:bg-amber-50' : 'text-blue-600 hover:bg-blue-50'
+                                                }`}
+                                            >
+                                                <span>
+                                                    <i className={`fa-solid ${pushSubscribed ? 'fa-bell-slash' : 'fa-bell'} mr-2`}></i>
+                                                    {pushSubscribed ? '取消推播通知' : '啟用推播通知'}
+                                                </span>
+                                                {pushSubscribed && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">運行中</span>}
+                                            </button>
+
+                                            <button onClick={()=>{ setCompleted([]); setCurrentUser(null); setUserProfile(null); goToCalendar(); fb.authModule.signOut(fb.auth); }} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold"><i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> 登出帳號</button>
+                                        </div>
+                                    </div>
+                                ) : fb ? (
+                                    <button onClick={() => setShowAuthModal(true)} className="flex items-center gap-2 bg-white border border-slate-300 px-3 py-1.5 rounded-full text-xs font-bold"><i className="fa-solid fa-cloud-arrow-up"></i> 登入</button>
+                                ) : null}
+                            </div>
                         </div>
                     </header>
 
@@ -1344,7 +1412,15 @@
                     )}
 
                     <main className="flex-grow py-8 px-4 w-full bg-slate-200/70 relative z-0">
-                        {view === 'admin-dashboard' && userProfile?.role === 'admin' ? <AdminDashboard /> : view === 'reader' && selectedDate ? renderReaderView() : renderCalendarView()}
+                        {view === 'admin-dashboard' && userProfile?.role === 'admin' ? (
+                            <AdminDashboard />
+                        ) : view === 'notifications' ? (
+                            renderNotificationsView()
+                        ) : view === 'reader' && selectedDate ? (
+                            renderReaderView()
+                        ) : (
+                            renderCalendarView()
+                        )}
                     </main>
 
                     <footer className="py-10 bg-slate-800 border-t border-slate-900 text-center text-slate-400 mt-auto">
@@ -1363,7 +1439,6 @@
     </script>
     
     <script>
-        // 💡 註冊唯一的超級大腦 sw.js
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js?v=260821_enhance1')
