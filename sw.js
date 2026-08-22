@@ -80,7 +80,7 @@ self.addEventListener('notificationclick', (event) => {
     }
 
     // 🛑 核心分支點：若 Data 為空或未能解析出有效 targetUrl，直接結束，不開啟任何網頁！
-    if (!targetUrl) {
+    if (!rawUrl) {
         console.log('[SW] ℹ️ FCM Data 為空或無有效 URL，點擊後已關閉通知，不開啓網頁。');
         return;
     }
