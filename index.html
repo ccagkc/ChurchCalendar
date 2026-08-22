@@ -91,6 +91,112 @@
             VAPID_KEY: "BL_D6wHmhWI-MDvEK0Ow3NkB8y51FjANqNNlDNsY1ZFDbgcB_Y_M8Fnffr4Zj9niuJjlIpXZ3Y8EM8JdI82e3QM"
         };
         
+        // ==========================================
+        // 內容類型設定表（日後新增 Google Sheet 分頁只改這裡）
+        // ==========================================
+        const CONTENT_TYPES = {
+            bible: {
+                sheetName: 'ReadBible',
+                id: 'bible',
+                label: '讀經',
+                colorClass: 'nature',          // 對應你現有的 nature- 色系
+                borderClass: 'border-l-nature-500',
+                bgClass: 'bg-nature-50',
+                textClass: 'text-nature-700',
+                icon: 'fa-book-bible',
+                isMultiple: false,
+                calendarLabelField: '類別',
+                hasContentFields: ['經卷', '經文', '語音連結', '釋義', '問題', '章節']
+            },
+            event: {
+                sheetName: 'Event',
+                id: 'event',
+                label: '活動',
+                colorClass: 'blue',
+                borderClass: 'border-l-blue-500',
+                bgClass: 'bg-blue-50',
+                textClass: 'text-blue-700',
+                icon: 'fa-bullhorn',
+                isMultiple: true,              // 同一天可有多筆
+                calendarLabelField: '活動標題',
+                hasContentFields: ['活動標題', '活動詳情', '內頁標題']
+            },
+            devotion: {
+                sheetName: 'Devotion',
+                id: 'devotion',
+                label: '靈修',
+                colorClass: 'purple',
+                borderClass: 'border-l-purple-500',
+                bgClass: 'bg-purple-50',
+                textClass: 'text-purple-700',
+                icon: 'fa-dove',
+                isMultiple: false,
+                calendarLabelField: '類別',
+                hasContentFields: ['內頁標題', '靈修內容', '默想經文', '默想', '禱告']
+            }
+        };
+        
+        // ==========================================
+        // 資料工具函式
+        // ==========================================
+        const normalizeDate = (str) => {
+            if (!str) return null;
+            const parts = String(str).replace(/\//g, '-').split(' ')[0].split('-');
+            if (parts.length !== 3) return null;
+            return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        };
+        
+        const fetchSheetAsObjects = async (sheetName) => {
+            const url = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+            const resp = await fetch(url).catch(() => null);
+            if (!resp || !resp.ok) return [];
+            const text = await resp.text();
+            const rows = parseCSV(text);
+            if (rows.length < 2) return [];
+            const headers = rows[0].map(h => h.trim());
+            return rows.slice(1)
+                .filter(row => row && row.length >= 2)
+                .map(row => {
+                    const obj = {};
+                    headers.forEach((h, i) => { obj[h] = row[i] ?? ''; });
+                    return obj;
+                })
+                .filter(obj => obj['日期']);
+        };
+        
+        // 回傳結構：
+        // {
+        //   dataByDate: { '2026-08-22': { bible: {...}, event: [...], devotion: {...} } },
+        //   allDates: ['2026-08-01', '2026-08-02', ...]
+        // }
+        const loadAllContent = async () => {
+            const dataByDate = {};
+            const dateSet = new Set();
+        
+            for (const [typeKey, config] of Object.entries(CONTENT_TYPES)) {
+                const rows = await fetchSheetAsObjects(config.sheetName);
+                for (const row of rows) {
+                    const dateStr = normalizeDate(row['日期']);
+                    if (!dateStr) continue;
+        
+                    dateSet.add(dateStr);
+                    if (!dataByDate[dateStr]) dataByDate[dateStr] = {};
+        
+                    if (config.isMultiple) {
+                        if (!dataByDate[dateStr][typeKey]) dataByDate[dateStr][typeKey] = [];
+                        dataByDate[dateStr][typeKey].push(row);
+                    } else {
+                        dataByDate[dateStr][typeKey] = row;
+                    }
+                }
+            }
+        
+            const allDates = Array.from(dateSet).sort();
+            return { dataByDate, allDates };
+        };
+
+        // END ~ 內容類型設定表
+        
         const getLocalKey = (uid = null) => uid ? `${SITE_CONFIG.storageKey}-${uid}` : `${SITE_CONFIG.storageKey}-guest`;
         
         const formatDate = (dateObj) => {
@@ -151,12 +257,10 @@
             const [showAnswer, setShowAnswer] = useState(false);
             
             const [devotionModalOpen, setDevotionModalOpen] = useState(false);
+
+            const [dataByDate, setDataByDate] = useState({});   // { '2026-08-22': { bible, event, devotion } }
+            const [allDates, setAllDates] = useState([]);       // 所有有內容的日期（排序後）
             
-            const [data, setData] = useState({}); 
-            const [eventData, setEventData] = useState({}); 
-            const [devotionData, setDevotionData] = useState({}); 
-            
-            const [validDates, setValidDates] = useState([]); 
             const [completed, setCompleted] = useState(() => {
                 const guestSaved = localStorage.getItem(getLocalKey(null));
                 return guestSaved ? JSON.parse(guestSaved) : [];
@@ -178,10 +282,22 @@
 
             const [isOffline, setIsOffline] = useState(!navigator.onLine);
             const [fontScale, setFontScale] = useState(() => parseInt(localStorage.getItem('kcc_font_scale')) || 0);
-
+            
             let unsubscribeProgress = useRef(null);
             let unsubscribeSettings = useRef(null);
             let unsubscribeProfile = useRef(null);
+
+            // 臨時相容：讓舊的 renderReaderView / renderDevotionModal 暫時還能跑
+            const data = {};
+            const eventData = {};
+            const devotionData = {};
+            const validDates = allDates;
+            
+            Object.entries(dataByDate).forEach(([dateStr, contents]) => {
+                if (contents.bible) data[dateStr] = contents.bible;
+                if (contents.event) eventData[dateStr] = contents.event;
+                if (contents.devotion) devotionData[dateStr] = contents.devotion;
+            });
 
             const goToCalendar = () => {
                 setView('calendar'); setShowAnswer(false); setDevotionModalOpen(false);
@@ -434,140 +550,71 @@
                 };
             }, []);
 
-            // 💡 完全相容 Perfect_Zero (index_2.html) 的 CSV 解析與日期正規化
+            // 💡 新版：統一載入所有 Google Sheet 內容
             useEffect(() => {
-                const fetchSheetData = async () => {
+                const load = async () => {
                     try {
                         const urlParams = new URLSearchParams(window.location.search);
                         const urlDate = urlParams.get('date');
 
-                        const cachedDataStr = localStorage.getItem(SITE_CONFIG.cacheKey);
-                        if (cachedDataStr) {
-                            const cached = JSON.parse(cachedDataStr);
-                            setData(cached.bible); setEventData(cached.events); setDevotionData(cached.devotion || {}); setValidDates(cached.datesArray);
-                            if (urlDate && (cached.bible[urlDate] || cached.events[urlDate] || (cached.devotion && cached.devotion[urlDate]))) {
+                        // 1. 先吃快取（保持原本體驗）
+                        const cachedStr = localStorage.getItem(SITE_CONFIG.cacheKey);
+                        if (cachedStr) {
+                            const cached = JSON.parse(cachedStr);
+                            setDataByDate(cached.dataByDate || {});
+                            setAllDates(cached.allDates || []);
+                            if (urlDate && cached.dataByDate?.[urlDate]) {
                                 goToDate(urlDate);
-                                const parts = urlDate.split('-'); setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
                             } else {
-                                initViewMonth(cached.datesArray, cached.bible, cached.devotion);
+                                initViewMonth(cached.allDates || [], cached.dataByDate || {});
                             }
-                            setLoading(false); 
+                            setLoading(false);
                         }
 
-                        const bibleUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.SHEET_NAME)}`;
-                        const eventUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.EVENT_SHEET_NAME)}`;
-                        const devotionUrl = `https://docs.google.com/spreadsheets/d/${SITE_CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SITE_CONFIG.DEVOTION_SHEET_NAME)}`;
+                        // 2. 背景更新最新資料
+                        const { dataByDate: freshData, allDates: freshDates } = await loadAllContent();
 
-                        const [bibleResp, eventResp, devResp] = await Promise.all([
-                            fetch(bibleUrl).catch(() => null), fetch(eventUrl).catch(() => null), fetch(devotionUrl).catch(() => null)
-                        ]);
+                        setDataByDate(freshData);
+                        setAllDates(freshDates);
+                        localStorage.setItem(SITE_CONFIG.cacheKey, JSON.stringify({
+                            dataByDate: freshData,
+                            allDates: freshDates
+                        }));
 
-                        if (!bibleResp || !bibleResp.ok) {
-                            if (!cachedDataStr) throw new Error("無法連接到讀經資料庫。請確認網路連線。");
-                            return; 
-                        }
-                        
-                        const bibleText = await bibleResp.text();
-                        const bibleRows = parseCSV(bibleText);
-                        const items = {}; const datesArray = [];
-                        if (bibleRows.length >= 2) {
-                            const headers = bibleRows[0].map(h => h.trim());
-                            for(let i=1; i<bibleRows.length; i++) {
-                                const row = bibleRows[i];
-                                if (!row || row.length < 2) continue;
-                                const item = {}; headers.forEach((h, idx) => item[h] = row[idx]);
-                                if(item['日期']) {
-                                    const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
-                                    const parts = dateStr.split('-');
-                                    if (parts.length === 3) {
-                                        const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                        items[stdDate] = item;
-                                        if (!datesArray.includes(stdDate)) datesArray.push(stdDate);
-                                    }
-                                }
-                            }
-                            datesArray.sort();
-                        }
-
-                        const events = {};
-                        if (eventResp && eventResp.ok) {
-                            const eventText = await eventResp.text();
-                            const eventRows = parseCSV(eventText);
-                            if (eventRows.length >= 2) {
-                                const eHeaders = eventRows[0].map(h => h.trim());
-                                for(let i=1; i<eventRows.length; i++) {
-                                    const row = eventRows[i];
-                                    if (!row || row.length < 2) continue;
-                                    const item = {}; eHeaders.forEach((h, idx) => item[h] = row[idx]);
-                                    if(item['日期']) {
-                                        const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
-                                        const parts = dateStr.split('-');
-                                        if (parts.length === 3) {
-                                            const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                            if (!events[stdDate]) events[stdDate] = [];
-                                            events[stdDate].push(item);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        const devData = {};
-                        if (devResp && devResp.ok) {
-                            const devText = await devResp.text();
-                            const devRows = parseCSV(devText);
-                            if (devRows.length >= 2) {
-                                const dHeaders = devRows[0].map(h => h.trim());
-                                for(let i=1; i<devRows.length; i++) {
-                                    const row = devRows[i];
-                                    if (!row || row.length < 2) continue;
-                                    const item = {}; dHeaders.forEach((h, idx) => item[h] = row[idx]);
-                                    if(item['日期']) {
-                                        const dateStr = item['日期'].replace(/\//g, '-').split(' ')[0];
-                                        const parts = dateStr.split('-');
-                                        if (parts.length === 3) {
-                                            const stdDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-                                            devData[stdDate] = item;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        setData(items); setEventData(events); setDevotionData(devData); setValidDates(datesArray);
-                        localStorage.setItem(SITE_CONFIG.cacheKey, JSON.stringify({ bible: items, events: events, devotion: devData, datesArray: datesArray }));
-                        
-                        if (!cachedDataStr) {
-                            if (urlDate && (items[urlDate] || events[urlDate] || devData[urlDate])) {
+                        if (!cachedStr) {
+                            if (urlDate && freshData[urlDate]) {
                                 goToDate(urlDate);
-                                const parts = urlDate.split('-'); setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
-                            } else { initViewMonth(datesArray, items, devData); }
+                                const parts = urlDate.split('-');
+                                setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                            } else {
+                                initViewMonth(freshDates, freshData);
+                            }
                         }
                         setLoading(false);
-
                     } catch (e) {
-                        if (!data || Object.keys(data).length === 0) setError(e.message);
+                        console.error(e);
+                        if (Object.keys(dataByDate).length === 0) setError(e.message);
                         setLoading(false);
                     }
                 };
 
-                const initViewMonth = (dates, items, devData) => {
-                    const allDates = [...dates, ...Object.keys(devData || {})];
-                    if (allDates.length > 0) {
-                        const todayStr = getTodayStr();
-                        let initialTarget = todayStr;
-                        if (!items[todayStr] && !(devData && devData[todayStr])) {
-                            const pastDates = allDates.filter(d => d <= todayStr).sort();
-                            initialTarget = pastDates.length > 0 ? pastDates[pastDates.length - 1] : allDates[0];
-                        }
-                        const parts = initialTarget.split('-');
-                        setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
+                const initViewMonth = (dates, dataMap) => {
+                    if (!dates || dates.length === 0) return;
+                    const todayStr = getTodayStr();
+                    let initialTarget = todayStr;
+                    if (!dataMap[todayStr]) {
+                        const past = dates.filter(d => d <= todayStr);
+                        initialTarget = past.length > 0 ? past[past.length - 1] : dates[0];
                     }
+                    const parts = initialTarget.split('-');
+                    setCurrentViewMonth(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1));
                 };
 
-                fetchSheetData();
+                load();
             }, []);
-            
+                  
             const toggleFinish = async (dateStr) => {
                 const isDone = completed.includes(dateStr);
                 const next = isDone ? completed.filter(x => x !== dateStr) : [...completed, dateStr];
@@ -916,10 +963,20 @@
                                     if(!dateObj) return <div key={`empty-${wi}-${di}`}></div>;
                                     const dateStr = formatDate(dateObj);
                                     const isPlan = validDates.includes(dateStr); const isDone = completed.includes(dateStr);
-                                    const dayEvents = eventData[dateStr] || []; const hasEvent = dayEvents.length > 0;
-                                    const dayDevotion = devotionData[dateStr]; const hasDevotion = !!dayDevotion;
-                                    const hasContent = isPlan || hasEvent || hasDevotion; 
+                                    const dayContent = dataByDate[dateStr] || {};
+                                    const hasContent = Object.keys(dayContent).length > 0;
+                                    const isDone = completed.includes(dateStr);
+                                    
+                                    // 按鈕 class 可簡化為：
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
+                                    if (!hasContent) {
+                                        btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
+                                    } else if (isDone) {
+                                        btnClass += 'bg-nature-50/80 text-nature-800 border-2 border-nature-500 cursor-pointer shadow-sm';
+                                    } else {
+                                        btnClass += 'bg-white border border-slate-200 hover:border-nature-400 text-slate-700 cursor-pointer shadow-sm';
+                                    }
+                                                                      
                                     if (!hasContent) btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
                                     else if (hasEvent && !isPlan && !hasDevotion) btnClass += 'bg-white border border-slate-200 hover:border-blue-300 cursor-pointer shadow-sm';
                                     else if (isDone) btnClass += 'bg-nature-50/80 text-nature-800 border-2 border-nature-500 cursor-pointer shadow-sm';
@@ -928,11 +985,25 @@
                                         <button key={dateStr} disabled={!hasContent} onClick={() => goToDate(dateStr)} className={btnClass}>
                                             <div className="w-full relative flex justify-center items-center mb-0.5 shrink-0"><span className={`text-[13px] md:text-base font-bold ${hasEvent && !isPlan && !hasDevotion ? 'text-blue-600' : 'text-slate-700'}`}>{dateObj.getDate()}</span>{isDone && <i className="fa-solid fa-check-circle text-[9px] md:text-xs text-emerald-500 absolute right-0"></i>}</div>
                                             <div className="w-full flex flex-col gap-[2px] overflow-hidden">
-                                                {hasEvent && dayEvents.slice(0, 1).map((evt, idx) => (<div key={idx} className="w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium bg-blue-50 text-blue-700 text-left tracking-tight border-l-[3px] border-l-blue-500">{evt['活動標題']}</div>))}
-                                                {isPlan && data[dateStr] && (<div className={`w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium text-left tracking-tight border-l-[3px] ${isDone ? 'bg-emerald-50 text-emerald-700 border-l-emerald-500' : 'bg-nature-50 text-nature-700 border-l-nature-500'}`}>{data[dateStr]['類別']}</div>)}
-                                                {hasDevotion && (<div className="w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium bg-purple-50 text-purple-700 text-left tracking-tight border-l-[3px] border-l-purple-500">{dayDevotion['類別'] || '靈修'}</div>)}
-                                            </div>
-                                        </button>
+                                                {/* 依 CONTENT_TYPES 自動顯示各類型小標籤 */}
+                                                {Object.entries(CONTENT_TYPES).map(([typeKey, config]) => {
+                                                    const dayItem = dataByDate[dateStr]?.[typeKey];
+                                                    if (!dayItem) return null;
+                                                
+                                                    const items = Array.isArray(dayItem) ? dayItem : [dayItem];
+                                                    // 月曆上每種類型最多顯示 1 個標籤，避免格子爆掉
+                                                    return items.slice(0, 1).map((item, idx) => {
+                                                        const label = item[config.calendarLabelField] || config.label;
+                                                        return (
+                                                            <div
+                                                                key={`${typeKey}-${idx}`}
+                                                                className={`w-full truncate pl-1 pr-0.5 py-[1px] rounded-r-[3px] text-[8px] md:text-[10px] font-sans font-medium text-left tracking-tight border-l-[3px] ${config.bgClass} ${config.textClass} ${config.borderClass}`}
+                                                            >
+                                                                {label}
+                                                            </div>
+                                                        );
+                                                    });
+                                                })}                                   
                                     );
                                 }))}
                             </div>
