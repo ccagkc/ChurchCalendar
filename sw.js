@@ -84,6 +84,10 @@ self.addEventListener('notificationclick', (event) => {
             }
         }
 
+    if (targetUrl === 'https://ccagkc.github.io/' || targetUrl === 'https://ccagkc.github.io') {
+        targetUrl = DEFAULT_SITE_URL;
+    }
+
     console.log('[SW] 🔗 最終成功擷取並解析導向 URL：', targetUrl);
    
 // 3. 執行網頁開啓與切換
