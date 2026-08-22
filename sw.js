@@ -91,22 +91,23 @@ self.addEventListener('notificationclick', (event) => {
     console.log('[SW] 🔗 最終成功擷取並解析導向 URL：', targetUrl);
    
 // 3. 執行網頁開啓與切換
-   event.waitUntil(
-       clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-           // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
-           for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
-                    client.navigate(targetUrl);
-                    return client.focus();
-                }
-            }
-            // 若未開啟，開啓新頁籤導向正確網址
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
-            }
-        })
-    );
+    if (targetUrl != 'https://ccagkc.github.io/') {
+      event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
+            for (let i = 0; i < clientList.length; i++) {
+                 let client = clientList[i];
+                 if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
+                     client.navigate(targetUrl);
+                     return client.focus();
+                 }
+             }
+             // 若未開啟，開啓新頁籤導向正確網址
+             if (clients.openWindow) {
+                 return clients.openWindow(targetUrl);
+             }
+         });
+     });
 });
 
 // ==========================================
