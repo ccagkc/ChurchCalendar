@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260821_fix_404 (徹底解決系統預設通知 404 錯誤)
+// 快取版本: v260822_close_on_null (Data 為空時點擊僅關閉通知)
 // ==========================================
 
 // 1. 載入 Firebase 9.x+ 相容版 SDK
@@ -19,7 +19,6 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 💡 專案正確保底網址
 const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 
 // ==========================================
@@ -30,78 +29,74 @@ const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW] 🚨 攔截到背景推播 Payload: ', payload);
 
-    // 1. 提取自訂資料中的 url
-    const rawUrl = payload.data?.url || payload.data?.link || payload.fcmOptions?.link || '';
-    
-    // 2. 提取標題與內文
-    const title = payload.notification?.title || payload.data?.title || '葵涌堂悅曆';
-    const body = payload.notification?.body || payload.data?.body || '您有一則新動態';
+    // 🛑 避免雙重通知：若 Payload 包含 notification，系統已自動繪製橫幅，SW 靜默退出
+    if (payload.notification) {
+        return;
+    }
 
-    // 3. 關鍵修正：將 rawUrl 顯式寫入 data 物件
+    // 🟢 純 Data 封包：由 SW 手動繪製通知，並將 url 綁定入 data 物件
+    const rawUrl = payload.data?.url || payload.data?.link || '';
+    const title = payload.data?.title || '葵涌堂悅曆';
+    const body = payload.data?.body || '您有一則新動態';
+
     const options = {
         body: body,
         icon: './icon-192.png',
         badge: './icon-192.png',
-        data: {
-            url: rawUrl // 👈 這裡成功將 FCM 的 url 塞入 Notification 物件中！
-        }
+        data: { url: rawUrl }
     };
 
-    // 4. 由 SW 手動渲染通知 (確保 data 不會丟失)
     self.registration.showNotification(title, options);
 });
 
-// 💡 核心保險絲：全域點擊攔截與 404 強制修正引擎
+// 💡 點擊通知邏輯：有 URL 才開啟網頁；無 URL (Data 為空) 則直接關閉訊息！
 self.addEventListener('notificationclick', (event) => {
-    event.notification.close(); // 關閉原本的通知
+    // 1. 無論如何，點擊後立即關閉通知橫幅
+    event.notification.close();
 
-    // 1. 此時 event.notification.data100% 存在，因為階段 1 已經手動寫入！
+    // 2. 提取 FCM 自訂資料中的 url
     const notificationData = event.notification.data || {};
-    const rawUrl = notificationData.url;
+    const rawUrl = notificationData.url || notificationData.link || event.notification.link;
 
-    let targetUrl = DEFAULT_SITE_URL;
+    let targetUrl = null;
 
-    // 2. 進行嚴謹解析
+    // 3. 嚴謹解析 URL (判斷 FCM 是否傳入有效的 url 資料)
     if (rawUrl && typeof rawUrl === 'string') {
-            const cleanedUrl = rawUrl.trim();
-    
-            // 🟢 情況 A：處理相對路徑 (?date=2026-08-22)
-            if (cleanedUrl.startsWith('?')) {
-                targetUrl = DEFAULT_SITE_URL + cleanedUrl;
-            } 
-            // 🟢 情況 B：利用原生 URL 物件進行精確結構解析
-            else {
-                try {
-                    const parsedUrl = new URL(cleanedUrl);
-                    
-                    // 只要主網域是 ccagkc.github.io，且路徑包含 ChurchCalendar，即視為合法正確網址
-                    if (parsedUrl.hostname === 'ccagkc.github.io' && parsedUrl.pathname.includes('ChurchCalendar')) {
-                        targetUrl = parsedUrl.href; // 100% 保留包含 ?date=... 的完整網址
-                    }
-                } catch (e) {
-                    console.warn('[SW] ⚠️ URL 格式解析失敗，退回預設網址:', e);
+        const cleanedUrl = rawUrl.trim();
+
+        if (cleanedUrl.startsWith('?')) {
+            targetUrl = DEFAULT_SITE_URL + cleanedUrl;
+        } else if (cleanedUrl.startsWith('http://') || cleanedUrl.startsWith('https://')) {
+            try {
+                const parsedUrl = new URL(cleanedUrl);
+                // 確保只開啟專案相關頁面，避免導向根網域 404
+                if (parsedUrl.hostname === 'ccagkc.github.io' && parsedUrl.pathname.includes('ChurchCalendar')) {
+                    targetUrl = parsedUrl.href;
                 }
+            } catch (e) {
+                console.warn('[SW] URL 格式不符，不進行開啟');
             }
         }
-
-    if (targetUrl === 'https://ccagkc.github.io/' || targetUrl === 'https://ccagkc.github.io') {
-        targetUrl = DEFAULT_SITE_URL;
     }
 
-    console.log('[SW] 🔗 最終成功擷取並解析導向 URL：', targetUrl);
-   
-// 3. 執行網頁開啓與切換
-   event.waitUntil(
-       clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-           // 若瀏覽器已開啟 ChurchCalendar 相關頁面，直接切換並導向
-           for (let i = 0; i < clientList.length; i++) {
+    // 🛑 核心分支點：若 Data 為空或未能解析出有效 targetUrl，直接結束，不開啟任何網頁！
+    if (!targetUrl) {
+        console.log('[SW] ℹ️ FCM Data 為空或無有效 URL，點擊後已關閉通知，不開啓網頁。');
+        return;
+    }
+
+    console.log('[SW] 🔗 偵測到有效 URL，呼叫瀏覽器開啟：', targetUrl);
+
+    // 4. 僅當 targetUrl 存在時，才執行網頁開啟與切換
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (let i = 0; i < clientList.length; i++) {
                 let client = clientList[i];
                 if (client.url && client.url.includes('ChurchCalendar') && 'navigate' in client) {
                     client.navigate(targetUrl);
                     return client.focus();
                 }
             }
-            // 若未開啟，開啓新頁籤導向正確網址
             if (clients.openWindow) {
                 return clients.openWindow(targetUrl);
             }
@@ -109,11 +104,10 @@ self.addEventListener('notificationclick', (event) => {
     );
 });
 
-
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260821_bc3';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260822_bc4';
 const STATIC_ASSETS = [
     './',
     './index.html',
