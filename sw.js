@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260822_bc7
+// 快取版本: v260822_bc8
 // ==========================================
 
 // 1. 載入 Firebase 9.x+ 相容版 SDK
@@ -74,8 +74,8 @@ self.addEventListener('notificationclick', (event) => {
         }
     }
 
-    // 🛑 核心分支點：若 Data 為空或未能解析出有效 targetUrl，直接結束，不開啟任何網頁！
-    if (Object.keys(notificationData).length === 0) {
+    // 🛑 核心分支點：若 Data 為空或未能解析出有效 targetUrl，塞入Default Url
+    if (!targetUrl) {
         targetUrl = DEFAULT_SITE_URL;
     }
 
@@ -106,7 +106,7 @@ self.addEventListener('notificationclick', (event) => {
 // ==========================================
 // 2. PWA 離線快取引擎 (具備網絡請求安全過濾)
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260822_bc7';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260822_bc8';
 const STATIC_ASSETS = [
     './',
     './index.html',
