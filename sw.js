@@ -104,7 +104,7 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 4. PWA 離線快取
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260822_enhance1';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260922_noRTDB1';
 const STATIC_ASSETS = [
     './',
     './index.html',
