@@ -106,7 +106,7 @@ messaging.onBackgroundMessage((payload) => {
 // 4. PWA 離線快取
 // ==========================================
 // 🟢 更新快取名稱，強制清除舊版快取並載入最新修復檔
-const CACHE_NAME = 'ccagkc-pwa-cache-v260923_fix_rtdb';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260924_fix_babel';
 const STATIC_ASSETS = [
     './',
     './index.html',
