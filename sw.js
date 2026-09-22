@@ -84,7 +84,7 @@ importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-comp
 firebase.initializeApp({
     apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
     authDomain: "ccagkc-biblereading-project.firebaseapp.com",
-    databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+    // databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "ccagkc-biblereading-project",
     storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
     messagingSenderId: "962459311265",
