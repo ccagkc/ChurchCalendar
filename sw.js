@@ -84,7 +84,6 @@ importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-comp
 firebase.initializeApp({
     apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
     authDomain: "ccagkc-biblereading-project.firebaseapp.com",
-    // databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "ccagkc-biblereading-project",
     storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
     messagingSenderId: "962459311265",
@@ -104,7 +103,7 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 4. PWA 離線快取
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260922_noRTDB1';
+const CACHE_NAME = 'ccagkc-pwa-cache-v260922_fix_rtdb';
 const STATIC_ASSETS = [
     './',
     './index.html',
