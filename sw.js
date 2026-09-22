@@ -1,5 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
+// 快取版本: v260923_fix_rtdb
 // ==========================================
 
 const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
@@ -81,10 +82,10 @@ self.addEventListener('notificationclick', (event) => {
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
 
+// 🟢 徹底移除 databaseURL，避免 Service Worker 背景連線至過期的 RTDB
 firebase.initializeApp({
     apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
     authDomain: "ccagkc-biblereading-project.firebaseapp.com",
-    databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "ccagkc-biblereading-project",
     storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
     messagingSenderId: "962459311265",
@@ -104,7 +105,8 @@ messaging.onBackgroundMessage((payload) => {
 // ==========================================
 // 4. PWA 離線快取
 // ==========================================
-const CACHE_NAME = 'ccagkc-pwa-cache-v260822_enhance1';
+// 🟢 更新快取名稱，強制清除舊版快取並載入最新修復檔
+const CACHE_NAME = 'ccagkc-pwa-cache-v260923_fix_rtdb';
 const STATIC_ASSETS = [
     './',
     './index.html',
