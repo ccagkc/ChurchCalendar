@@ -437,15 +437,18 @@
                 let unsubscribeAuth = null;
                 const initFirebase = async () => {
                     try {
-                        const appModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-                        const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-                        const dbModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-                        const messagingModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null);
+                        // 🟢 升級：使用 Promise.all 並行 ES Module 載入，完全避免 require 防護
+                        const [appModule, authModule, dbModule, messagingModule] = await Promise.all([
+                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
+                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"),
+                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"),
+                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null)
+                        ]);
                 
+                        // 🟢 升級：純粹 Firestore 配置 (徹底移除已過期 Realtime Database 的 databaseURL)
                         const firebaseConfig = {
                             apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
                             authDomain: "ccagkc-biblereading-project.firebaseapp.com",
-                            // databaseURL: "https://ccagkc-biblereading-project-default-rtdb.asia-southeast1.firebasedatabase.app",
                             projectId: "ccagkc-biblereading-project",
                             storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
                             messagingSenderId: "962459311265",
@@ -459,8 +462,12 @@
                         
                         let messaging = null;
                         if (messagingModule && messagingModule.isSupported) {
-                            const isSupported = await messagingModule.isSupported();
-                            if (isSupported) messaging = messagingModule.getMessaging(app);
+                            try {
+                                const isSupported = await messagingModule.isSupported();
+                                if (isSupported) messaging = messagingModule.getMessaging(app);
+                            } catch (msgErr) {
+                                console.warn("⚠️ FCM 推播模組初始化跳過:", msgErr);
+                            }
                         }
                 
                         const fbObj = { auth, db, appId, authModule, dbModule, messagingModule, messaging };
@@ -678,7 +685,10 @@
                             }
                             setShowAuthModal(false);
                         }
-                    } catch (error) { setAuthError("系統連線異常，請稍後再試。"); } finally { setProcessing(false); }
+                    } catch (error) { 
+                        console.error("Firebase 認證錯誤細節:", error);
+                        setAuthError(`連線異常 (${error.code || error.message})`); 
+                    } finally { setProcessing(false); }
                 };
 
                 return (
@@ -1259,7 +1269,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=260922_noRTDB1')
+                navigator.serviceWorker.register('./sw.js?v=260821_fix_rtdb')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
