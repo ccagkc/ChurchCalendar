@@ -91,14 +91,14 @@
         };
         
         // ==========================================
-        // 內容類型設定表（日後新增 Google Sheet 分頁只改這裡）
+        // 內容類型設定表
         // ==========================================
         const CONTENT_TYPES = {
             bible: {
                 sheetName: 'ReadBible',
                 id: 'bible',
                 label: '讀經',
-                colorClass: 'nature',          // 對應你現有的 nature- 色系
+                colorClass: 'nature',
                 borderClass: 'border-l-nature-500',
                 bgClass: 'bg-nature-50',
                 textClass: 'text-nature-700',
@@ -116,7 +116,7 @@
                 bgClass: 'bg-blue-50',
                 textClass: 'text-blue-700',
                 icon: 'fa-bullhorn',
-                isMultiple: true,              // 同一天可有多筆
+                isMultiple: true,
                 calendarLabelField: '活動標題',
                 hasContentFields: ['活動標題', '活動詳情', '內頁標題']
             },
@@ -253,7 +253,6 @@
             const [dataByDate, setDataByDate] = useState({});   
             const [allDates, setAllDates] = useState([]);       
             
-            // 歷史通知訊息中心 State
             const [notificationsList, setNotificationsList] = useState([]);
 
             const [completed, setCompleted] = useState(() => {
@@ -329,7 +328,6 @@
                 if (!fbObj || !fbObj.messagingModule || !fbObj.messaging || !user) return;
             
                 if (localStorage.getItem(`kcc_push_disabled_${user.uid}`) === 'true') {
-                    console.log('ℹ️ [FCM Engine] 用戶已手動停用推播，跳過背景自動刷新。');
                     return;
                 }
             
@@ -338,7 +336,6 @@
                     const profileSnap = await fbObj.dbModule.getDoc(profileRef);
             
                     if (profileSnap.exists() && profileSnap.data().notificationsEnabled === false) {
-                        console.log('ℹ️ [FCM Engine] 雲端紀錄顯示推播已關閉，停止靜默綁定。');
                         return;
                     }
             
@@ -356,10 +353,9 @@
                         }, { merge: true });
             
                         setPushSubscribed(true);
-                        console.log('✅ [FCM Engine] 背景靜默更新成功！');
                     }
                 } catch (e) {
-                    console.warn('⚠️ [FCM Engine] 靜默更新跳過:', e);
+                    console.warn('⚠️ FCM 靜默更新跳過:', e);
                 }
             };
             
@@ -385,7 +381,7 @@
                             try {
                                 await fb.messagingModule.deleteToken(fb.messaging);
                             } catch (deleteErr) {
-                                console.warn('⚠️ [FCM Engine] 設備端 Token 廢除靜默跳過:', deleteErr);
+                                console.warn('設備端 Token 廢除靜默跳過:', deleteErr);
                             }
             
                             setPushSubscribed(false);
@@ -437,18 +433,18 @@
                 let unsubscribeAuth = null;
                 const initFirebase = async () => {
                     try {
-                        // 🟢 使用 Promise.all 並行載入模組，避開 Babel Fallback 的 require 問題
+                        // 🟢 終極防護：使用 nativeImport 隱藏 import 語法，防止 Babel 誤觸 require
+                        const nativeImport = new Function('url', 'return import(url)');
                         const [appModule, authModule, dbModule, messagingModule] = await Promise.all([
-                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
-                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"),
-                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"),
-                            import("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null)
+                            nativeImport("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
+                            nativeImport("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"),
+                            nativeImport("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"),
+                            nativeImport("https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js").catch(() => null)
                         ]);
                 
                         const firebaseConfig = {
                             apiKey: "AIzaSyAEMB-eVojfzcUMyKt9JgGK_okPRO2V73g",
                             authDomain: "ccagkc-biblereading-project.firebaseapp.com",
-                            // 💡 已移除 databaseURL
                             projectId: "ccagkc-biblereading-project",
                             storageBucket: "ccagkc-biblereading-project.firebasestorage.app",
                             messagingSenderId: "962459311265",
@@ -466,7 +462,7 @@
                                 const isSupported = await messagingModule.isSupported();
                                 if (isSupported) messaging = messagingModule.getMessaging(app);
                             } catch (msgErr) {
-                                console.warn("⚠️ FCM 推播模組初始化跳過:", msgErr);
+                                console.warn("FCM 初始化跳過:", msgErr);
                             }
                         }
                 
@@ -494,7 +490,6 @@
                                         list.push({ id: doc.id, ...doc.data() });
                                     });
 
-                                    // 確保最新的通告置頂
                                     list.sort((a, b) => {
                                         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                                         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -1270,7 +1265,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=260822_fix_rtdb') // <-- 更新 Service Worker 版本
+                navigator.serviceWorker.register('./sw.js?v=260924_fix_babel')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
