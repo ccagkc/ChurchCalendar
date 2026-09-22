@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v260923_fix_rtdb
+// 快取版本: v260924_fix_babel
 // ==========================================
 
 const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
