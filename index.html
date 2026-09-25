@@ -433,7 +433,6 @@
                 let unsubscribeAuth = null;
                 const initFirebase = async () => {
                     try {
-                        // 🟢 終極防護：使用 nativeImport 隱藏 import 語法，防止 Babel 誤觸 require
                         const nativeImport = new Function('url', 'return import(url)');
                         const [appModule, authModule, dbModule, messagingModule] = await Promise.all([
                             nativeImport("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
@@ -648,6 +647,7 @@
                 const [step, setStep] = useState(1);
                 const [username, setUsername] = useState('');
                 const [selectedGroup, setSelectedGroup] = useState('');
+                const [inputInviteCode, setInputInviteCode] = useState(''); // 🟢 新增邀請碼狀態
                 const [authError, setAuthError] = useState('');
                 const [processing, setProcessing] = useState(false);
 
@@ -668,6 +668,20 @@
                             } catch (err) { setStep(2); }
                         } else if (step === 2) {
                             if (!selectedGroup) { setAuthError('請選擇你所屬的小組'); setProcessing(false); return; }
+                            
+                            // 🟢 教會專屬邀請碼驗證邏輯
+                            if (!inputInviteCode.trim()) { 
+                                setAuthError('請輸入教會專屬邀請碼'); 
+                                setProcessing(false); 
+                                return; 
+                            }
+                            const currentSysCode = appSettings.inviteCode || 'KCC2026';
+                            if (inputInviteCode.trim().toUpperCase() !== currentSysCode.toUpperCase()) {
+                                setAuthError('❌ 邀請碼錯誤，請向小組長查詢'); 
+                                setProcessing(false); 
+                                return;
+                            }
+
                             const cred = await fb.authModule.createUserWithEmailAndPassword(fb.auth, fakeEmail, FIXED_PASS);
                             const guestSaved = localStorage.getItem(getLocalKey(null));
                             const initialProgress = guestSaved ? JSON.parse(guestSaved) : [];
@@ -711,10 +725,22 @@
                                                     {appSettings.groups.map(g => <option key={g} value={g}>{g}</option>)}
                                                 </select>
                                             </div>
+                                            {/* 🟢 加入邀請碼輸入框 */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-nature-800 mb-2">教會專屬邀請碼</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={inputInviteCode} 
+                                                    onChange={e=>setInputInviteCode(e.target.value)} 
+                                                    placeholder="請輸入邀請碼 (例如 KCC2026)" 
+                                                    className="w-full px-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-lg uppercase" 
+                                                    required 
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                     <button type="submit" disabled={processing} className="w-full bg-nature-600 hover:bg-nature-700 text-white font-bold py-4 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 mt-4 text-lg">
-                                        {processing ? <i className="fa-solid fa-spinner fa-spin"></i> : (step === 1 ? '確認代號' : '完成註冊')}
+                                        {processing ? <i className="fa-solid fa-spinner fa-spin"></i> : (step === 1 ? '確認代號' : '完成驗證並註冊')}
                                     </button>
                                     {step === 2 && <button type="button" onClick={() => setStep(1)} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 mt-2">返回修改代號</button>}
                                 </form>
@@ -1099,9 +1125,8 @@
                 );
             };
 
-            // 🟢 歷史通知訊息牆渲染頁面：排序保證（最新發布的永遠在最頂端）
+            // 歷史通知訊息牆渲染頁面
             const renderNotificationsView = () => {
-                // 前端再次二次確認降序排序 (防護)
                 const sortedList = [...notificationsList].sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -1184,7 +1209,6 @@
                             </div>
                             
                             <div className="flex items-center gap-2">
-                                {/* 歷史通知訊息牆按鈕 */}
                                 <button 
                                     onClick={() => {
                                         if (!currentUser) {
@@ -1265,7 +1289,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=260924_fix_babel')
+                navigator.serviceWorker.register('./sw.js?v=260925_invite_code')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
