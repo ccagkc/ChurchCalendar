@@ -1170,22 +1170,43 @@
                                                 {item.body}
                                             </p>
 
-                                            {item.url && (
-                                                <div className="pt-2 flex justify-end">
-                                                    <button 
-                                                        onClick={() => {
-                                                            if (item.url.startsWith('?date=')) {
-                                                                goToDate(item.url.replace('?date=', ''));
-                                                            } else {
-                                                                window.open(item.url, '_blank');
-                                                            }
-                                                        }}
-                                                        className="text-xs bg-nature-50 text-nature-700 hover:bg-nature-100 font-bold px-4 py-2 rounded-xl transition flex items-center"
-                                                    >
-                                                        開啟相關專頁 <i className="fa-solid fa-arrow-right ml-1.5 text-[10px]"></i>
-                                                    </button>
-                                                </div>
-                                            )}
+                                            {/* 🟢 全新動態雙按鈕渲染邏輯 */}
+                                            {(() => {
+                                                const hasRegUrl = !!item.regUrl;
+                                                const actualPageUrl = item.pageUrl || item.url; // 支援舊版通告資料
+                                                const hasPageUrl = !!actualPageUrl;
+
+                                                const handleLinkClick = (urlStr) => {
+                                                    if (urlStr.startsWith('?date=')) {
+                                                        goToDate(urlStr.replace('?date=', ''));
+                                                    } else {
+                                                        window.open(urlStr, '_blank');
+                                                    }
+                                                };
+
+                                                if (!hasRegUrl && !hasPageUrl) return null; // 若皆空白則完全隱藏此區塊
+
+                                                return (
+                                                    <div className="pt-3 flex flex-wrap justify-end gap-2 mt-2">
+                                                        {hasPageUrl && (
+                                                            <button 
+                                                                onClick={() => handleLinkClick(actualPageUrl)}
+                                                                className="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 font-bold px-4 py-2 rounded-xl transition flex items-center"
+                                                            >
+                                                                開啟相關專頁 <i className="fa-solid fa-arrow-up-right-from-square ml-1.5 text-[10px]"></i>
+                                                            </button>
+                                                        )}
+                                                        {hasRegUrl && (
+                                                            <button 
+                                                                onClick={() => handleLinkClick(item.regUrl)}
+                                                                className="text-xs bg-nature-600 text-white hover:bg-nature-700 shadow-sm font-bold px-5 py-2 rounded-xl transition flex items-center"
+                                                            >
+                                                                <i className="fa-solid fa-file-signature mr-1.5"></i> 前往報名
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </article>
                                     );
                                 })}
