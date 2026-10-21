@@ -193,17 +193,14 @@
         };
         const getTodayStr = () => formatDate(new Date());
 
+        // 🟢 專家修復：完美回歸 Google Drive iframe 嵌入模式，解決 403 Forbidden 授權阻擋
         const parseExternalLink = (url, type = 'audio') => {
             if (!url || typeof url !== 'string' || url.trim() === '') return null;
             if (!url.includes('google.com')) return { type: 'raw', url };
             const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
             if (!idMatch) return { type: 'raw', url };
             const id = idMatch[1];
-            
-            if (type === 'audio') {
-                return { type: 'raw', url: `https://drive.google.com/uc?export=view&id=${id}` };
-            }
-            return { type: 'embed', url: `https://docs.google.com/document/d/${id}/preview` };
+            return { type: 'embed', url: type === 'audio' ? `https://drive.google.com/file/d/${id}/preview` : `https://docs.google.com/document/d/${id}/preview` };
         };
 
         const getImageUrl = (str) => {
@@ -1336,8 +1333,8 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // 🟢 專家級系統操作：更新 SW 版本號以強制清除舊版緩存
-                navigator.serviceWorker.register('./sw.js?v=261021_v1.3_NoticeEnhance')
+                // 🟢 專家修復：提昇 SW 版本號，強制清理舊快取，無縫套用最新防裁切架構
+                navigator.serviceWorker.register('./sw.js?v=261021_v1.4_AudioPlayerFixed')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
