@@ -1,6 +1,6 @@
 // ==========================================
 // 葵涌堂悅曆 · Service Worker (FCM & PWA)
-// 快取版本: v261021_V1.3_Enhance
+// 快取版本: v261021_v1.3_NoticeEnhance
 // ==========================================
 
 const DEFAULT_SITE_URL = 'https://ccagkc.github.io/ChurchCalendar/';
@@ -106,7 +106,7 @@ messaging.onBackgroundMessage((payload) => {
 // 4. PWA 離線快取
 // ==========================================
 // 🟢 更新快取名稱，強制清除舊版快取並載入最新修復檔
-const CACHE_NAME = 'ccagkc-pwa-cache-v261021_V1.3_Enhance';
+const CACHE_NAME = 'ccagkc-pwa-cache-v261021_v1.3_NoticeEnhance';
 const STATIC_ASSETS = [
     './',
     './index.html',
