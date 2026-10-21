@@ -90,6 +90,9 @@
             VAPID_KEY: "BL_D6wHmhWI-MDvEK0Ow3NkB8y51FjANqNNlDNsY1ZFDbgcB_Y_M8Fnffr4Zj9niuJjlIpXZ3Y8EM8JdI82e3QM"
         };
         
+        // ==========================================
+        // 內容類型設定表
+        // ==========================================
         const CONTENT_TYPES = {
             bible: {
                 sheetName: 'ReadBible',
@@ -132,6 +135,9 @@
             }
         };
         
+        // ==========================================
+        // 資料工具函式
+        // ==========================================
         const normalizeDate = (str) => {
             if (!str) return null;
             const parts = String(str).replace(/\//g, '-').split(' ')[0].split('-');
@@ -193,18 +199,13 @@
         };
         const getTodayStr = () => formatDate(new Date());
 
-        // 🟢 核心修復：強制將 Google Drive 連結轉換為直連 API，杜絕 iframe 嵌入
         const parseExternalLink = (url, type = 'audio') => {
             if (!url || typeof url !== 'string' || url.trim() === '') return null;
             if (!url.includes('google.com')) return { type: 'raw', url };
             const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
             if (!idMatch) return { type: 'raw', url };
             const id = idMatch[1];
-            
-            if (type === 'audio') {
-                return { type: 'raw', url: `https://drive.google.com/uc?export=view&id=${id}` };
-            }
-            return { type: 'embed', url: `https://docs.google.com/document/d/${id}/preview` };
+            return { type: 'embed', url: type === 'audio' ? `https://drive.google.com/file/d/${id}/preview` : `https://docs.google.com/document/d/${id}/preview` };
         };
 
         const getImageUrl = (str) => {
@@ -241,94 +242,6 @@
             return arr;
         };
 
-        // 🌟 極致完美的客製化音訊播放器
-        const CustomAudioPlayer = ({ src, themeColor = 'nature' }) => {
-            const audioRef = useRef(null);
-            const progressRef = useRef(null);
-            const [isPlaying, setIsPlaying] = useState(false);
-            const [currentTime, setCurrentTime] = useState(0);
-            const [duration, setDuration] = useState(0);
-
-            const togglePlay = () => {
-                if (isPlaying) {
-                    audioRef.current.pause();
-                } else {
-                    audioRef.current.play();
-                }
-                setIsPlaying(!isPlaying);
-            };
-
-            // 智能更新時間與長度 (處理 Google Drive 串流延遲加載長度的問題)
-            const handleTimeUpdate = () => {
-                if (!audioRef.current) return;
-                setCurrentTime(audioRef.current.currentTime);
-                if (duration === 0 || duration === Infinity) {
-                    const dur = audioRef.current.duration;
-                    if (dur && dur !== Infinity && !isNaN(dur)) setDuration(dur);
-                }
-            };
-
-            const handleLoadedMetadata = () => {
-                const dur = audioRef.current.duration;
-                if (dur && dur !== Infinity && !isNaN(dur)) setDuration(dur);
-            };
-
-            const handleSeek = (e) => {
-                if (!duration || !audioRef.current) return;
-                const rect = progressRef.current.getBoundingClientRect();
-                const percent = (e.clientX - rect.left) / rect.width;
-                audioRef.current.currentTime = percent * duration;
-                setCurrentTime(percent * duration);
-            };
-
-            const formatTime = (time) => {
-                if (isNaN(time) || time === 0 || time === Infinity) return "00:00";
-                const m = Math.floor(time / 60).toString().padStart(2, '0');
-                const s = Math.floor(time % 60).toString().padStart(2, '0');
-                return `${m}:${s}`;
-            };
-
-            const themeStyles = themeColor === 'purple' 
-                ? { bg: 'bg-purple-100', text: 'text-purple-600', fill: 'bg-purple-500', hover: 'hover:bg-purple-200' }
-                : { bg: 'bg-nature-100', text: 'text-nature-600', fill: 'bg-nature-500', hover: 'hover:bg-nature-200' };
-
-            const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-            return (
-                <div className="w-full flex items-center gap-3 p-3 bg-white rounded-[1.5rem] shadow-sm border border-slate-200">
-                    <audio 
-                        ref={audioRef} 
-                        src={src} 
-                        onTimeUpdate={handleTimeUpdate} 
-                        onLoadedMetadata={handleLoadedMetadata}
-                        onEnded={() => setIsPlaying(false)}
-                        className="hidden"
-                        preload="metadata"
-                    />
-                    
-                    <button 
-                        onClick={togglePlay} 
-                        className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-full ${themeStyles.bg} ${themeStyles.text} ${themeStyles.hover} transition-all duration-300 active:scale-95`}
-                    >
-                        <i className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} ${isPlaying ? '' : 'ml-1'} text-lg`}></i>
-                    </button>
-                    
-                    <div className="flex-grow flex flex-col justify-center cursor-pointer h-full py-2" onClick={handleSeek} ref={progressRef}>
-                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
-                            <div 
-                                className={`absolute top-0 left-0 h-full ${themeStyles.fill} transition-all duration-150 ease-out`} 
-                                style={{ width: `${progressPercent}%` }}
-                            ></div>
-                        </div>
-                    </div>
-                    
-                    <div className="text-[11px] md:text-xs font-bold text-slate-400 shrink-0 min-w-[70px] text-right tabular-nums">
-                        <span className="text-slate-600">{formatTime(currentTime)}</span> <span className="opacity-60">/ {formatTime(duration)}</span>
-                    </div>
-                </div>
-            );
-        };
-
         const App = () => {
             const [view, setView] = useState('calendar'); 
             const [selectedDate, setSelectedDate] = useState(null);
@@ -341,7 +254,6 @@
             const [allDates, setAllDates] = useState([]);       
             
             const [notificationsList, setNotificationsList] = useState([]);
-            const [readNotifs, setReadNotifs] = useState([]);
 
             const [completed, setCompleted] = useState(() => {
                 const guestSaved = localStorage.getItem(getLocalKey(null));
@@ -409,14 +321,6 @@
                 if (confirm('確定要清除這台設備上的未登入閱讀紀錄嗎？\n(這不會影響任何已註冊帳號的資料)')) {
                     setCompleted([]); localStorage.removeItem(getLocalKey(null));
                 }
-            };
-
-            const markNotifAsRead = (id) => {
-                if (readNotifs.includes(id)) return;
-                const updated = [...readNotifs, id];
-                setReadNotifs(updated);
-                const uid = currentUser ? currentUser.uid : 'guest';
-                localStorage.setItem(`kcc_read_notifs_${uid}`, JSON.stringify(updated));
             };
 
             const autoSilentTokenRefresh = async (user, fbObj) => {
@@ -577,9 +481,6 @@
                             if (user) {
                                 setCurrentUser(user);
                                 
-                                const userReadStr = localStorage.getItem(`kcc_read_notifs_${user.uid}`);
-                                setReadNotifs(userReadStr ? JSON.parse(userReadStr) : []);
-                                
                                 const notifCol = dbModule.collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
                                 const notifQuery = dbModule.query(notifCol, dbModule.orderBy('createdAt', 'desc'));
                                 unsubscribeNotif.current = dbModule.onSnapshot(notifQuery, (snapshot) => {
@@ -633,9 +534,6 @@
                                 setUserProfile(null);
                                 setPushSubscribed(false);
                                 setNotificationsList([]); 
-                                
-                                const guestReadStr = localStorage.getItem('kcc_read_notifs_guest');
-                                setReadNotifs(guestReadStr ? JSON.parse(guestReadStr) : []);
                                 
                                 const guestSaved = localStorage.getItem(getLocalKey(null));
                                 setCompleted(guestSaved ? JSON.parse(guestSaved) : []); 
@@ -749,7 +647,7 @@
                 const [step, setStep] = useState(1);
                 const [username, setUsername] = useState('');
                 const [selectedGroup, setSelectedGroup] = useState('');
-                const [inputInviteCode, setInputInviteCode] = useState('');
+                const [inputInviteCode, setInputInviteCode] = useState(''); // 🟢 新增邀請碼狀態
                 const [authError, setAuthError] = useState('');
                 const [processing, setProcessing] = useState(false);
 
@@ -771,6 +669,7 @@
                         } else if (step === 2) {
                             if (!selectedGroup) { setAuthError('請選擇你所屬的小組'); setProcessing(false); return; }
                             
+                            // 🟢 教會專屬邀請碼驗證邏輯
                             if (!inputInviteCode.trim()) { 
                                 setAuthError('請輸入教會專屬邀請碼'); 
                                 setProcessing(false); 
@@ -826,6 +725,7 @@
                                                     {appSettings.groups.map(g => <option key={g} value={g}>{g}</option>)}
                                                 </select>
                                             </div>
+                                            {/* 🟢 加入邀請碼輸入框 */}
                                             <div>
                                                 <label className="block text-sm font-bold text-nature-800 mb-2">教會專屬邀請碼</label>
                                                 <input 
@@ -855,8 +755,6 @@
                     <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i><p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步資料...</p>
                 </div>
             );
-
-            const globalUnreadCount = notificationsList.filter(n => !readNotifs.includes(n.id)).length;
 
             const renderCalendarView = () => {
                 const year = currentViewMonth.getFullYear();
@@ -910,9 +808,8 @@
                                     const isDone = completed.includes(dateStr);
                                     
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
-                                    
                                     if (!hasContent) {
-                                        btnClass += 'bg-slate-50/50 text-slate-400 cursor-not-allowed border border-slate-200';
+                                        btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
                                     } else if (isDone) {
                                         btnClass += 'bg-nature-50/80 text-nature-800 border-2 border-nature-500 cursor-pointer shadow-sm';
                                     } else {
@@ -1027,14 +924,30 @@
                                 <div className="bg-nature-700 text-white p-8 md:p-10"><h2 className="text-3xl font-serif font-bold">{currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}</h2></div>
                                 <div className="p-6 md:p-10 space-y-12">
                                     {audioInfo && (
-                                        <section className="bg-white p-5 md:p-6 rounded-[2rem] border border-nature-100 shadow-md w-full max-w-full overflow-hidden mb-8">
-                                            <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm shrink-0 border-b border-nature-50 pb-3">
-                                                <i className="fa-solid fa-circle-play mr-2 text-nature-500 text-lg animate-pulse"></i>
+                                        <section className="bg-nature-50/50 p-5 md:p-6 rounded-3xl border border-nature-100/80 shadow-inner w-full max-w-full overflow-hidden">
+                                            <h4 className="text-nature-800 font-bold mb-3 flex items-center text-sm shrink-0">
+                                                <i className="fa-solid fa-circle-play mr-2 text-nature-600 text-base animate-pulse"></i>
                                                 經文語音朗讀
                                             </h4>
                                             <div className="w-full min-w-0 flex justify-center items-center">
-                                                {/* 🟢 完全棄用 iframe，強制使用 CustomAudioPlayer */}
-                                                <CustomAudioPlayer src={audioInfo.url} themeColor="nature" />
+                                                {audioInfo.type === 'embed' ? (
+                                                    <div className="w-full h-16 rounded-2xl overflow-hidden bg-black/5 border border-nature-200/50">
+                                                        <iframe 
+                                                            src={audioInfo.url} 
+                                                            className="w-full h-full border-0" 
+                                                            allow="autoplay"
+                                                        ></iframe>
+                                                    </div>
+                                                ) : (
+                                                    <audio 
+                                                        controls 
+                                                        controlsList="nodownload" 
+                                                        className="w-full block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-nature-400"
+                                                    >
+                                                        <source src={audioInfo.url} />
+                                                        您的瀏覽器不支援音訊播放器。
+                                                    </audio>
+                                                )}
                                             </div>
                                         </section>
                                     )}
@@ -1149,15 +1062,31 @@
                         <div className="max-w-3xl mx-auto w-full px-6 py-10 md:py-16 space-y-12 flex-grow">
                           
                            {devotionAudioInfo && (
-                                <div className="bg-white p-5 md:p-6 rounded-[2rem] shadow-lg border border-stone-100 flex flex-col items-center sticky top-20 z-40 w-full max-w-full overflow-hidden mb-8">
-                                    <div className="text-stone-600 font-sans text-xs font-bold uppercase tracking-widest mb-4 flex items-center shrink-0 border-b border-stone-50 pb-3 w-full justify-center">
-                                        <i className="fa-solid fa-headphones mr-2 text-purple-500 text-base animate-pulse"></i>
+                                <div className="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-stone-200 flex flex-col items-center sticky top-20 z-40 w-full max-w-full overflow-hidden">
+                                    <div className="text-stone-500 font-sans text-xs font-bold uppercase tracking-widest mb-3 flex items-center shrink-0">
+                                        <i className="fa-solid fa-headphones mr-2 text-purple-500 text-sm animate-pulse"></i>
                                         點擊播放靈修音訊
                                     </div>
                                     
                                     <div className="w-full min-w-0 flex justify-center items-center">
-                                        {/* 🟢 同步移除 iframe，靈修頁面強制使用客製化播放器 */}
-                                        <CustomAudioPlayer src={devotionAudioInfo.url} themeColor="purple" />
+                                        {devotionAudioInfo.type === 'embed' ? (
+                                            <div className="w-full h-16 rounded-2xl overflow-hidden bg-black/5 border border-stone-200">
+                                                <iframe 
+                                                    src={devotionAudioInfo.url} 
+                                                    className="w-full h-full border-0" 
+                                                    allow="autoplay"
+                                                ></iframe>
+                                            </div>
+                                        ) : (
+                                            <audio 
+                                                controls 
+                                                controlsList="nodownload" 
+                                                className="w-full block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-purple-400"
+                                            >
+                                                <source src={devotionAudioInfo.url} />
+                                                您的瀏覽器不支援音訊播放器。
+                                            </audio>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1196,6 +1125,7 @@
                 );
             };
 
+            // 歷史通知訊息牆渲染頁面
             const renderNotificationsView = () => {
                 const sortedList = [...notificationsList].sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1209,14 +1139,8 @@
                             <button onClick={goToCalendar} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
                             </button>
-                            <div className="flex flex-col items-end">
-                                <div className="text-slate-800 font-bold text-lg font-serif flex items-center mb-1">
-                                    <i className="fa-solid fa-box-archive text-nature-600 mr-2"></i> 歷史通告與訊息
-                                </div>
-                                <div className="text-xs font-bold text-slate-500 flex gap-2">
-                                    <span className="bg-slate-200 px-2 py-1 rounded-md">全部: {sortedList.length}</span>
-                                    <span className="bg-red-100 text-red-600 px-2 py-1 rounded-md">未讀: {globalUnreadCount}</span>
-                                </div>
+                            <div className="text-slate-800 font-bold text-lg font-serif flex items-center">
+                                <i className="fa-solid fa-box-archive text-nature-600 mr-2"></i> 歷史通告與訊息
                             </div>
                         </div>
 
@@ -1229,7 +1153,6 @@
                             <div className="space-y-4">
                                 {sortedList.map((item) => {
                                     const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-                                    const isRead = readNotifs.includes(item.id);
                                     
                                     return (
                                         <article key={item.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:border-nature-300 transition relative overflow-hidden group">
@@ -1247,61 +1170,43 @@
                                                 {item.body}
                                             </p>
 
-                                            <div className="pt-3 flex flex-wrap justify-between items-center gap-2 mt-2 border-t border-slate-100">
-                                                <div>
-                                                    {isRead ? (
-                                                        <span className="text-xs text-emerald-600 font-bold flex items-center bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
-                                                            <i className="fa-solid fa-check-double mr-1.5"></i> 已讀
-                                                        </span>
-                                                    ) : (
-                                                        <button 
-                                                            onClick={() => markNotifAsRead(item.id)}
-                                                            className="text-xs text-nature-600 bg-nature-50 hover:bg-nature-100 border border-nature-200 font-bold px-3 py-1.5 rounded-full transition flex items-center"
-                                                        >
-                                                            標記為已讀
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                
-                                                <div className="flex flex-wrap gap-2">
-                                                    {(() => {
-                                                        const hasRegUrl = !!item.regUrl;
-                                                        const actualPageUrl = item.pageUrl || item.url;
-                                                        const hasPageUrl = !!actualPageUrl;
+                                            {/* 🟢 全新動態雙按鈕渲染邏輯 */}
+                                            {(() => {
+                                                const hasRegUrl = !!item.regUrl;
+                                                const actualPageUrl = item.pageUrl || item.url; // 支援舊版通告資料
+                                                const hasPageUrl = !!actualPageUrl;
 
-                                                        const handleLinkClick = (urlStr) => {
-                                                            if (urlStr.startsWith('?date=')) {
-                                                                goToDate(urlStr.replace('?date=', ''));
-                                                            } else {
-                                                                window.open(urlStr, '_blank');
-                                                            }
-                                                        };
+                                                const handleLinkClick = (urlStr) => {
+                                                    if (urlStr.startsWith('?date=')) {
+                                                        goToDate(urlStr.replace('?date=', ''));
+                                                    } else {
+                                                        window.open(urlStr, '_blank');
+                                                    }
+                                                };
 
-                                                        if (!hasRegUrl && !hasPageUrl) return null;
+                                                if (!hasRegUrl && !hasPageUrl) return null; // 若皆空白則完全隱藏此區塊
 
-                                                        return (
-                                                            <>
-                                                                {hasPageUrl && (
-                                                                    <button 
-                                                                        onClick={() => handleLinkClick(actualPageUrl)}
-                                                                        className="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 font-bold px-4 py-2 rounded-xl transition flex items-center"
-                                                                    >
-                                                                        相關專頁 <i className="fa-solid fa-arrow-up-right-from-square ml-1.5 text-[10px]"></i>
-                                                                    </button>
-                                                                )}
-                                                                {hasRegUrl && (
-                                                                    <button 
-                                                                        onClick={() => handleLinkClick(item.regUrl)}
-                                                                        className="text-xs bg-nature-600 text-white hover:bg-nature-700 shadow-sm font-bold px-5 py-2 rounded-xl transition flex items-center"
-                                                                    >
-                                                                        <i className="fa-solid fa-file-signature mr-1.5"></i> 前往報名
-                                                                    </button>
-                                                                )}
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </div>
+                                                return (
+                                                    <div className="pt-3 flex flex-wrap justify-end gap-2 mt-2">
+                                                        {hasPageUrl && (
+                                                            <button 
+                                                                onClick={() => handleLinkClick(actualPageUrl)}
+                                                                className="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 font-bold px-4 py-2 rounded-xl transition flex items-center"
+                                                            >
+                                                                開啟相關專頁 <i className="fa-solid fa-arrow-up-right-from-square ml-1.5 text-[10px]"></i>
+                                                            </button>
+                                                        )}
+                                                        {hasRegUrl && (
+                                                            <button 
+                                                                onClick={() => handleLinkClick(item.regUrl)}
+                                                                className="text-xs bg-nature-600 text-white hover:bg-nature-700 shadow-sm font-bold px-5 py-2 rounded-xl transition flex items-center"
+                                                            >
+                                                                <i className="fa-solid fa-file-signature mr-1.5"></i> 前往報名
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </article>
                                     );
                                 })}
@@ -1338,9 +1243,9 @@
                                     title="訊息中心"
                                 >
                                     <i className="fa-solid fa-bell text-base md:text-lg"></i>
-                                    {currentUser && globalUnreadCount > 0 && (
+                                    {currentUser && notificationsList.length > 0 && (
                                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                                            {globalUnreadCount}
+                                            {notificationsList.length}
                                         </span>
                                     )}
                                 </button>                                           
@@ -1405,7 +1310,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=261021_V1.3_Enhance')
+                navigator.serviceWorker.register('./sw.js?v=260925_invite_code')
                     .then(registration => {
                         console.log('✅ PWA 全能超級大腦 (SW) 啟動成功');
                         registration.update();
