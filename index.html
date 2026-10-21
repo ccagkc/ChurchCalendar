@@ -90,9 +90,6 @@
             VAPID_KEY: "BL_D6wHmhWI-MDvEK0Ow3NkB8y51FjANqNNlDNsY1ZFDbgcB_Y_M8Fnffr4Zj9niuJjlIpXZ3Y8EM8JdI82e3QM"
         };
         
-        // ==========================================
-        // 內容類型設定表
-        // ==========================================
         const CONTENT_TYPES = {
             bible: {
                 sheetName: 'ReadBible',
@@ -135,9 +132,6 @@
             }
         };
         
-        // ==========================================
-        // 資料工具函式
-        // ==========================================
         const normalizeDate = (str) => {
             if (!str) return null;
             const parts = String(str).replace(/\//g, '-').split(' ')[0].split('-');
@@ -254,6 +248,9 @@
             const [allDates, setAllDates] = useState([]);       
             
             const [notificationsList, setNotificationsList] = useState([]);
+            
+            // 🟢 新增：追蹤已讀通告的狀態
+            const [readNotifs, setReadNotifs] = useState([]);
 
             const [completed, setCompleted] = useState(() => {
                 const guestSaved = localStorage.getItem(getLocalKey(null));
@@ -321,6 +318,15 @@
                 if (confirm('確定要清除這台設備上的未登入閱讀紀錄嗎？\n(這不會影響任何已註冊帳號的資料)')) {
                     setCompleted([]); localStorage.removeItem(getLocalKey(null));
                 }
+            };
+
+            // 🟢 新增：標記單一通告為已讀功能
+            const markNotifAsRead = (id) => {
+                if (readNotifs.includes(id)) return;
+                const updated = [...readNotifs, id];
+                setReadNotifs(updated);
+                const uid = currentUser ? currentUser.uid : 'guest';
+                localStorage.setItem(`kcc_read_notifs_${uid}`, JSON.stringify(updated));
             };
 
             const autoSilentTokenRefresh = async (user, fbObj) => {
@@ -481,6 +487,10 @@
                             if (user) {
                                 setCurrentUser(user);
                                 
+                                // 🟢 載入使用者專屬的通知已讀紀錄
+                                const userReadStr = localStorage.getItem(`kcc_read_notifs_${user.uid}`);
+                                setReadNotifs(userReadStr ? JSON.parse(userReadStr) : []);
+                                
                                 const notifCol = dbModule.collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
                                 const notifQuery = dbModule.query(notifCol, dbModule.orderBy('createdAt', 'desc'));
                                 unsubscribeNotif.current = dbModule.onSnapshot(notifQuery, (snapshot) => {
@@ -534,6 +544,10 @@
                                 setUserProfile(null);
                                 setPushSubscribed(false);
                                 setNotificationsList([]); 
+                                
+                                // 載入訪客的通知已讀紀錄
+                                const guestReadStr = localStorage.getItem('kcc_read_notifs_guest');
+                                setReadNotifs(guestReadStr ? JSON.parse(guestReadStr) : []);
                                 
                                 const guestSaved = localStorage.getItem(getLocalKey(null));
                                 setCompleted(guestSaved ? JSON.parse(guestSaved) : []); 
@@ -647,7 +661,7 @@
                 const [step, setStep] = useState(1);
                 const [username, setUsername] = useState('');
                 const [selectedGroup, setSelectedGroup] = useState('');
-                const [inputInviteCode, setInputInviteCode] = useState(''); // 🟢 新增邀請碼狀態
+                const [inputInviteCode, setInputInviteCode] = useState(''); 
                 const [authError, setAuthError] = useState('');
                 const [processing, setProcessing] = useState(false);
 
@@ -669,7 +683,6 @@
                         } else if (step === 2) {
                             if (!selectedGroup) { setAuthError('請選擇你所屬的小組'); setProcessing(false); return; }
                             
-                            // 🟢 教會專屬邀請碼驗證邏輯
                             if (!inputInviteCode.trim()) { 
                                 setAuthError('請輸入教會專屬邀請碼'); 
                                 setProcessing(false); 
@@ -725,7 +738,6 @@
                                                     {appSettings.groups.map(g => <option key={g} value={g}>{g}</option>)}
                                                 </select>
                                             </div>
-                                            {/* 🟢 加入邀請碼輸入框 */}
                                             <div>
                                                 <label className="block text-sm font-bold text-nature-800 mb-2">教會專屬邀請碼</label>
                                                 <input 
@@ -755,6 +767,9 @@
                     <i className="fa-solid fa-leaf fa-spin text-5xl mb-4"></i><p className="font-medium animate-pulse text-lg mt-4 tracking-widest">正在同步資料...</p>
                 </div>
             );
+
+            // 計算全域的未讀通知總數
+            const globalUnreadCount = notificationsList.filter(n => !readNotifs.includes(n.id)).length;
 
             const renderCalendarView = () => {
                 const year = currentViewMonth.getFullYear();
@@ -808,8 +823,10 @@
                                     const isDone = completed.includes(dateStr);
                                     
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
+                                    
+                                    // 🟢 顯示優化 1：月曆空白網格顯示淡灰色窄框線
                                     if (!hasContent) {
-                                        btnClass += 'bg-slate-100/50 text-slate-400 cursor-not-allowed border border-transparent';
+                                        btnClass += 'bg-slate-50/50 text-slate-400 cursor-not-allowed border border-slate-200';
                                     } else if (isDone) {
                                         btnClass += 'bg-nature-50/80 text-nature-800 border-2 border-nature-500 cursor-pointer shadow-sm';
                                     } else {
@@ -939,10 +956,11 @@
                                                         ></iframe>
                                                     </div>
                                                 ) : (
+                                                    // 🟢 顯示優化 2：精準控制原生音訊播放器大小與外觀，防止按鈕被裁切
                                                     <audio 
                                                         controls 
                                                         controlsList="nodownload" 
-                                                        className="w-full block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-nature-400"
+                                                        className="w-full h-11 md:h-12 block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-nature-400 bg-slate-50"
                                                     >
                                                         <source src={audioInfo.url} />
                                                         您的瀏覽器不支援音訊播放器。
@@ -1078,10 +1096,11 @@
                                                 ></iframe>
                                             </div>
                                         ) : (
+                                            // 🟢 顯示優化 2：針對靈修頁面音訊播放器外觀優化
                                             <audio 
                                                 controls 
                                                 controlsList="nodownload" 
-                                                className="w-full block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-purple-400"
+                                                className="w-full h-11 md:h-12 block min-w-0 rounded-full outline-none focus:ring-2 focus:ring-purple-400 bg-slate-50"
                                             >
                                                 <source src={devotionAudioInfo.url} />
                                                 您的瀏覽器不支援音訊播放器。
@@ -1125,7 +1144,6 @@
                 );
             };
 
-            // 歷史通知訊息牆渲染頁面
             const renderNotificationsView = () => {
                 const sortedList = [...notificationsList].sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1135,12 +1153,19 @@
 
                 return (
                     <div className="max-w-3xl mx-auto w-full animate-fade-in pb-10">
+                        {/* 🟢 顯示優化 3：頂部顯示全部數目及未讀數目 */}
                         <div className="flex justify-between items-center mb-6">
                             <button onClick={goToCalendar} className="bg-white px-4 py-2 rounded-full border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 shadow-sm flex items-center text-sm transition">
                                 <i className="fa-solid fa-chevron-left mr-2"></i> 返回月曆
                             </button>
-                            <div className="text-slate-800 font-bold text-lg font-serif flex items-center">
-                                <i className="fa-solid fa-box-archive text-nature-600 mr-2"></i> 歷史通告與訊息
+                            <div className="flex flex-col items-end">
+                                <div className="text-slate-800 font-bold text-lg font-serif flex items-center mb-1">
+                                    <i className="fa-solid fa-box-archive text-nature-600 mr-2"></i> 歷史通告與訊息
+                                </div>
+                                <div className="text-xs font-bold text-slate-500 flex gap-2">
+                                    <span className="bg-slate-200 px-2 py-1 rounded-md">全部: {sortedList.length}</span>
+                                    <span className="bg-red-100 text-red-600 px-2 py-1 rounded-md">未讀: {globalUnreadCount}</span>
+                                </div>
                             </div>
                         </div>
 
@@ -1153,6 +1178,8 @@
                             <div className="space-y-4">
                                 {sortedList.map((item) => {
                                     const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                                    // 🟢 檢查是否已讀
+                                    const isRead = readNotifs.includes(item.id);
                                     
                                     return (
                                         <article key={item.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:border-nature-300 transition relative overflow-hidden group">
@@ -1170,43 +1197,62 @@
                                                 {item.body}
                                             </p>
 
-                                            {/* 🟢 全新動態雙按鈕渲染邏輯 */}
-                                            {(() => {
-                                                const hasRegUrl = !!item.regUrl;
-                                                const actualPageUrl = item.pageUrl || item.url; // 支援舊版通告資料
-                                                const hasPageUrl = !!actualPageUrl;
+                                            {/* 🟢 顯示優化 3：已讀標籤、按鈕與雙連結並排渲染 */}
+                                            <div className="pt-3 flex flex-wrap justify-between items-center gap-2 mt-2 border-t border-slate-100">
+                                                <div>
+                                                    {isRead ? (
+                                                        <span className="text-xs text-emerald-600 font-bold flex items-center bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                                                            <i className="fa-solid fa-check-double mr-1.5"></i> 已讀
+                                                        </span>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => markNotifAsRead(item.id)}
+                                                            className="text-xs text-nature-600 bg-nature-50 hover:bg-nature-100 border border-nature-200 font-bold px-3 py-1.5 rounded-full transition flex items-center"
+                                                        >
+                                                            標記為已讀
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(() => {
+                                                        const hasRegUrl = !!item.regUrl;
+                                                        const actualPageUrl = item.pageUrl || item.url;
+                                                        const hasPageUrl = !!actualPageUrl;
 
-                                                const handleLinkClick = (urlStr) => {
-                                                    if (urlStr.startsWith('?date=')) {
-                                                        goToDate(urlStr.replace('?date=', ''));
-                                                    } else {
-                                                        window.open(urlStr, '_blank');
-                                                    }
-                                                };
+                                                        const handleLinkClick = (urlStr) => {
+                                                            if (urlStr.startsWith('?date=')) {
+                                                                goToDate(urlStr.replace('?date=', ''));
+                                                            } else {
+                                                                window.open(urlStr, '_blank');
+                                                            }
+                                                        };
 
-                                                if (!hasRegUrl && !hasPageUrl) return null; // 若皆空白則完全隱藏此區塊
+                                                        if (!hasRegUrl && !hasPageUrl) return null;
 
-                                                return (
-                                                    <div className="pt-3 flex flex-wrap justify-end gap-2 mt-2">
-                                                        {hasPageUrl && (
-                                                            <button 
-                                                                onClick={() => handleLinkClick(actualPageUrl)}
-                                                                className="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 font-bold px-4 py-2 rounded-xl transition flex items-center"
-                                                            >
-                                                                開啟相關專頁 <i className="fa-solid fa-arrow-up-right-from-square ml-1.5 text-[10px]"></i>
-                                                            </button>
-                                                        )}
-                                                        {hasRegUrl && (
-                                                            <button 
-                                                                onClick={() => handleLinkClick(item.regUrl)}
-                                                                className="text-xs bg-nature-600 text-white hover:bg-nature-700 shadow-sm font-bold px-5 py-2 rounded-xl transition flex items-center"
-                                                            >
-                                                                <i className="fa-solid fa-file-signature mr-1.5"></i> 前往報名
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })()}
+                                                        return (
+                                                            <>
+                                                                {hasPageUrl && (
+                                                                    <button 
+                                                                        onClick={() => handleLinkClick(actualPageUrl)}
+                                                                        className="text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 font-bold px-4 py-2 rounded-xl transition flex items-center"
+                                                                    >
+                                                                        相關專頁 <i className="fa-solid fa-arrow-up-right-from-square ml-1.5 text-[10px]"></i>
+                                                                    </button>
+                                                                )}
+                                                                {hasRegUrl && (
+                                                                    <button 
+                                                                        onClick={() => handleLinkClick(item.regUrl)}
+                                                                        className="text-xs bg-nature-600 text-white hover:bg-nature-700 shadow-sm font-bold px-5 py-2 rounded-xl transition flex items-center"
+                                                                    >
+                                                                        <i className="fa-solid fa-file-signature mr-1.5"></i> 前往報名
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
                                         </article>
                                     );
                                 })}
@@ -1243,9 +1289,10 @@
                                     title="訊息中心"
                                 >
                                     <i className="fa-solid fa-bell text-base md:text-lg"></i>
-                                    {currentUser && notificationsList.length > 0 && (
+                                    {/* 🟢 顯示優化 3：只在有未讀訊息時顯示紅點數字 */}
+                                    {currentUser && globalUnreadCount > 0 && (
                                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                                            {notificationsList.length}
+                                            {globalUnreadCount}
                                         </span>
                                     )}
                                 </button>                                           
