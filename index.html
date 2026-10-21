@@ -193,13 +193,18 @@
         };
         const getTodayStr = () => formatDate(new Date());
 
+        // 🟢 核心修復：強制將 Google Drive 連結轉換為直連 API，杜絕 iframe 嵌入
         const parseExternalLink = (url, type = 'audio') => {
             if (!url || typeof url !== 'string' || url.trim() === '') return null;
             if (!url.includes('google.com')) return { type: 'raw', url };
             const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
             if (!idMatch) return { type: 'raw', url };
             const id = idMatch[1];
-            return { type: 'embed', url: type === 'audio' ? `https://drive.google.com/file/d/${id}/preview` : `https://docs.google.com/document/d/${id}/preview` };
+            
+            if (type === 'audio') {
+                return { type: 'raw', url: `https://drive.google.com/uc?export=view&id=${id}` };
+            }
+            return { type: 'embed', url: `https://docs.google.com/document/d/${id}/preview` };
         };
 
         const getImageUrl = (str) => {
@@ -236,7 +241,7 @@
             return arr;
         };
 
-        // 🌟 核心升級：精美的客製化音訊播放器元件
+        // 🌟 極致完美的客製化音訊播放器
         const CustomAudioPlayer = ({ src, themeColor = 'nature' }) => {
             const audioRef = useRef(null);
             const progressRef = useRef(null);
@@ -253,16 +258,23 @@
                 setIsPlaying(!isPlaying);
             };
 
+            // 智能更新時間與長度 (處理 Google Drive 串流延遲加載長度的問題)
             const handleTimeUpdate = () => {
+                if (!audioRef.current) return;
                 setCurrentTime(audioRef.current.currentTime);
+                if (duration === 0 || duration === Infinity) {
+                    const dur = audioRef.current.duration;
+                    if (dur && dur !== Infinity && !isNaN(dur)) setDuration(dur);
+                }
             };
 
             const handleLoadedMetadata = () => {
-                setDuration(audioRef.current.duration || 0);
+                const dur = audioRef.current.duration;
+                if (dur && dur !== Infinity && !isNaN(dur)) setDuration(dur);
             };
 
             const handleSeek = (e) => {
-                if (!duration) return;
+                if (!duration || !audioRef.current) return;
                 const rect = progressRef.current.getBoundingClientRect();
                 const percent = (e.clientX - rect.left) / rect.width;
                 audioRef.current.currentTime = percent * duration;
@@ -270,7 +282,7 @@
             };
 
             const formatTime = (time) => {
-                if (isNaN(time) || time === 0) return "00:00";
+                if (isNaN(time) || time === 0 || time === Infinity) return "00:00";
                 const m = Math.floor(time / 60).toString().padStart(2, '0');
                 const s = Math.floor(time % 60).toString().padStart(2, '0');
                 return `${m}:${s}`;
@@ -291,6 +303,7 @@
                         onLoadedMetadata={handleLoadedMetadata}
                         onEnded={() => setIsPlaying(false)}
                         className="hidden"
+                        preload="metadata"
                     />
                     
                     <button 
@@ -1020,17 +1033,8 @@
                                                 經文語音朗讀
                                             </h4>
                                             <div className="w-full min-w-0 flex justify-center items-center">
-                                                {audioInfo.type === 'embed' ? (
-                                                    <div className="w-full h-16 rounded-2xl overflow-hidden bg-black/5 border border-nature-200/50">
-                                                        <iframe 
-                                                            src={audioInfo.url} 
-                                                            className="w-full h-full border-0" 
-                                                            allow="autoplay"
-                                                        ></iframe>
-                                                    </div>
-                                                ) : (
-                                                    <CustomAudioPlayer src={audioInfo.url} themeColor="nature" />
-                                                )}
+                                                {/* 🟢 完全棄用 iframe，強制使用 CustomAudioPlayer */}
+                                                <CustomAudioPlayer src={audioInfo.url} themeColor="nature" />
                                             </div>
                                         </section>
                                     )}
@@ -1152,17 +1156,8 @@
                                     </div>
                                     
                                     <div className="w-full min-w-0 flex justify-center items-center">
-                                        {devotionAudioInfo.type === 'embed' ? (
-                                            <div className="w-full h-16 rounded-2xl overflow-hidden bg-black/5 border border-stone-200">
-                                                <iframe 
-                                                    src={devotionAudioInfo.url} 
-                                                    className="w-full h-full border-0" 
-                                                    allow="autoplay"
-                                                ></iframe>
-                                            </div>
-                                        ) : (
-                                            <CustomAudioPlayer src={devotionAudioInfo.url} themeColor="purple" />
-                                        )}
+                                        {/* 🟢 同步移除 iframe，靈修頁面強制使用客製化播放器 */}
+                                        <CustomAudioPlayer src={devotionAudioInfo.url} themeColor="purple" />
                                     </div>
                                 </div>
                             )}
