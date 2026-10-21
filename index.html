@@ -90,9 +90,6 @@
             VAPID_KEY: "BL_D6wHmhWI-MDvEK0Ow3NkB8y51FjANqNNlDNsY1ZFDbgcB_Y_M8Fnffr4Zj9niuJjlIpXZ3Y8EM8JdI82e3QM"
         };
         
-        // ==========================================
-        // 內容類型設定表
-        // ==========================================
         const CONTENT_TYPES = {
             bible: {
                 sheetName: 'ReadBible',
@@ -135,9 +132,6 @@
             }
         };
         
-        // ==========================================
-        // 資料工具函式
-        // ==========================================
         const normalizeDate = (str) => {
             if (!str) return null;
             const parts = String(str).replace(/\//g, '-').split(' ')[0].split('-');
@@ -242,6 +236,86 @@
             return arr;
         };
 
+        // 🌟 核心升級：精美的客製化音訊播放器元件
+        const CustomAudioPlayer = ({ src, themeColor = 'nature' }) => {
+            const audioRef = useRef(null);
+            const progressRef = useRef(null);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [currentTime, setCurrentTime] = useState(0);
+            const [duration, setDuration] = useState(0);
+
+            const togglePlay = () => {
+                if (isPlaying) {
+                    audioRef.current.pause();
+                } else {
+                    audioRef.current.play();
+                }
+                setIsPlaying(!isPlaying);
+            };
+
+            const handleTimeUpdate = () => {
+                setCurrentTime(audioRef.current.currentTime);
+            };
+
+            const handleLoadedMetadata = () => {
+                setDuration(audioRef.current.duration || 0);
+            };
+
+            const handleSeek = (e) => {
+                if (!duration) return;
+                const rect = progressRef.current.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                audioRef.current.currentTime = percent * duration;
+                setCurrentTime(percent * duration);
+            };
+
+            const formatTime = (time) => {
+                if (isNaN(time) || time === 0) return "00:00";
+                const m = Math.floor(time / 60).toString().padStart(2, '0');
+                const s = Math.floor(time % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            const themeStyles = themeColor === 'purple' 
+                ? { bg: 'bg-purple-100', text: 'text-purple-600', fill: 'bg-purple-500', hover: 'hover:bg-purple-200' }
+                : { bg: 'bg-nature-100', text: 'text-nature-600', fill: 'bg-nature-500', hover: 'hover:bg-nature-200' };
+
+            const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+            return (
+                <div className="w-full flex items-center gap-3 p-3 bg-white rounded-[1.5rem] shadow-sm border border-slate-200">
+                    <audio 
+                        ref={audioRef} 
+                        src={src} 
+                        onTimeUpdate={handleTimeUpdate} 
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onEnded={() => setIsPlaying(false)}
+                        className="hidden"
+                    />
+                    
+                    <button 
+                        onClick={togglePlay} 
+                        className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-full ${themeStyles.bg} ${themeStyles.text} ${themeStyles.hover} transition-all duration-300 active:scale-95`}
+                    >
+                        <i className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} ${isPlaying ? '' : 'ml-1'} text-lg`}></i>
+                    </button>
+                    
+                    <div className="flex-grow flex flex-col justify-center cursor-pointer h-full py-2" onClick={handleSeek} ref={progressRef}>
+                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
+                            <div 
+                                className={`absolute top-0 left-0 h-full ${themeStyles.fill} transition-all duration-150 ease-out`} 
+                                style={{ width: `${progressPercent}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                    
+                    <div className="text-[11px] md:text-xs font-bold text-slate-400 shrink-0 min-w-[70px] text-right tabular-nums">
+                        <span className="text-slate-600">{formatTime(currentTime)}</span> <span className="opacity-60">/ {formatTime(duration)}</span>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [view, setView] = useState('calendar'); 
             const [selectedDate, setSelectedDate] = useState(null);
@@ -254,7 +328,6 @@
             const [allDates, setAllDates] = useState([]);       
             
             const [notificationsList, setNotificationsList] = useState([]);
-            
             const [readNotifs, setReadNotifs] = useState([]);
 
             const [completed, setCompleted] = useState(() => {
@@ -825,7 +898,6 @@
                                     
                                     let btnClass = 'relative h-[4.5rem] md:h-24 rounded-xl flex flex-col items-center p-0.5 transition-all overflow-hidden ';
                                     
-                                    // 🟢 顯示優化 1：月曆空白網格顯示淡灰色窄框線
                                     if (!hasContent) {
                                         btnClass += 'bg-slate-50/50 text-slate-400 cursor-not-allowed border border-slate-200';
                                     } else if (isDone) {
@@ -942,7 +1014,6 @@
                                 <div className="bg-nature-700 text-white p-8 md:p-10"><h2 className="text-3xl font-serif font-bold">{currentData['經卷'] ? `${currentData['經卷']} ${currentData['章節']}` : '內容準備中'}</h2></div>
                                 <div className="p-6 md:p-10 space-y-12">
                                     {audioInfo && (
-                                        // 🟢 強化音訊播放器外觀 (方案二)：美化外層包裝區塊
                                         <section className="bg-white p-5 md:p-6 rounded-[2rem] border border-nature-100 shadow-md w-full max-w-full overflow-hidden mb-8">
                                             <h4 className="text-nature-800 font-bold mb-4 flex items-center text-sm shrink-0 border-b border-nature-50 pb-3">
                                                 <i className="fa-solid fa-circle-play mr-2 text-nature-500 text-lg animate-pulse"></i>
@@ -958,17 +1029,7 @@
                                                         ></iframe>
                                                     </div>
                                                 ) : (
-                                                    // 🟢 釋放內部 audio 原生高度，完美避免裁切
-                                                    <div className="w-full bg-slate-50/50 rounded-2xl p-1">
-                                                        <audio 
-                                                            controls 
-                                                            controlsList="nodownload" 
-                                                            className="w-full block min-w-0 outline-none"
-                                                        >
-                                                            <source src={audioInfo.url} />
-                                                            您的瀏覽器不支援音訊播放器。
-                                                        </audio>
-                                                    </div>
+                                                    <CustomAudioPlayer src={audioInfo.url} themeColor="nature" />
                                                 )}
                                             </div>
                                         </section>
@@ -1084,7 +1145,6 @@
                         <div className="max-w-3xl mx-auto w-full px-6 py-10 md:py-16 space-y-12 flex-grow">
                           
                            {devotionAudioInfo && (
-                                // 🟢 強化音訊播放器外觀 (方案二)：美化靈修頁面外層包裝區塊
                                 <div className="bg-white p-5 md:p-6 rounded-[2rem] shadow-lg border border-stone-100 flex flex-col items-center sticky top-20 z-40 w-full max-w-full overflow-hidden mb-8">
                                     <div className="text-stone-600 font-sans text-xs font-bold uppercase tracking-widest mb-4 flex items-center shrink-0 border-b border-stone-50 pb-3 w-full justify-center">
                                         <i className="fa-solid fa-headphones mr-2 text-purple-500 text-base animate-pulse"></i>
@@ -1101,17 +1161,7 @@
                                                 ></iframe>
                                             </div>
                                         ) : (
-                                            // 🟢 釋放內部 audio 原生高度，完美避免裁切
-                                            <div className="w-full bg-stone-50/50 rounded-2xl p-1">
-                                                <audio 
-                                                    controls 
-                                                    controlsList="nodownload" 
-                                                    className="w-full block min-w-0 outline-none"
-                                                >
-                                                    <source src={devotionAudioInfo.url} />
-                                                    您的瀏覽器不支援音訊播放器。
-                                                </audio>
-                                            </div>
+                                            <CustomAudioPlayer src={devotionAudioInfo.url} themeColor="purple" />
                                         )}
                                     </div>
                                 </div>
